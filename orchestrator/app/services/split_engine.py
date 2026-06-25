@@ -81,7 +81,7 @@ def derive_payment_status(splits: list[PaymentSplit]) -> str:
 
 
 class SplitEngine:
-    """Records audit trail for automatic LNBits splitpayments."""
+    """Records the split audit trail for a payment."""
 
     def __init__(self, session: AsyncSession, lnbits_client: LNBitsClient | None = None) -> None:
         self.session = session
@@ -126,7 +126,7 @@ class SplitEngine:
         # Calculate exact split amounts (largest remainder algorithm)
         splits = calculate_splits(payment.amount_sats, targets)
 
-        # Record audit trail (LNBits splitpayments does the actual transfer)
+        # Record audit trail for the calculated split
         records: list[PaymentSplit] = []
         for target, amount in splits:
             records.append(

@@ -111,7 +111,7 @@ async def lnbits_paid_webhook(
     if payment.status != "pending":
         return {"status": "ok", "message": "already processed"}
 
-    # Record split audit trail (LNBits splitpayments handles actual transfers)
+    # Record split audit trail for the payment
     result = await session.execute(select(Tenant).where(Tenant.id == payment.tenant_id))
     tenant = result.scalar_one_or_none()
     if tenant:
