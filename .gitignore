@@ -1,0 +1,48 @@
+.DS_Store
+__pycache__/
+*.pyc
+node_modules/
+dist/
+
+# ── Environment files (keep only *.env.example) ──────────────────────
+.env
+.env.*
+!.env.example
+!**/.env.example
+.env.backup
+
+# Frontend env variants
+dashboard/.env.local
+dashboard/.env.production
+dashboard/.env.*.local
+
+# ── Deploy / compose variants with real infra references ─────────────
+docker-compose.cherito.yml
+docker-compose.*.local.yml
+
+# ── Backups / dumps / wallet material ────────────────────────────────
+backups/
+*.sql.gz
+*.dump
+bootstrap-wallets.json
+
+# ── Node credentials / data (defense in depth) ───────────────────────
+lnd/tls.cert
+lnd/data/
+lnd2/tls.cert
+lnd2/data/
+bitcoind/data/
+**/*.macaroon
+**/tls.cert
+
+# ── Signet block-signing key (keep local; commit only the .example) ──
+signet/signet_keys.json
+!signet/signet_keys.json.example
+
+# Local backups
+backups/
+*.tar.gz
+*.dump
+*.sql.gz
+*.macaroon
+tls.cert

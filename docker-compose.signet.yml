@@ -1,0 +1,135 @@
+# =====================================================================
+# docker-compose.signet.yml
+# Coffee Split Infrastructure - Phase 6 (custom signet override)
+#
+# Override for main docker-compose.yml. Run with:
+#   docker compose -f docker-compose.yml -f docker-compose.signet.yml up -d
+#
+# Changes from regtest:
+#   - bitcoind → custom signet (signet=1, ports 38332/38333)
+#   - lnd/lnd2 → signet network
+#   - Includes signet-challenge flag for bitcoind
+# =====================================================================
+
+services:
+
+  # -------------------------------------------------------------------
+  # Bitcoin Core (custom signet)
+  # -------------------------------------------------------------------
+  bitcoind:
+    container_name: bitcoind-signet
+    ports:
+      - "38332:38332"   # JSON-RPC (signet)
+      - "38333:38333"   # P2P (signet)
+      - "28332:28332"   # ZMQ rawblock
+      - "28333:28333"   # ZMQ rawtx
+    volumes:
+      - ./bitcoind/bitcoin-signet.conf:/data/.bitcoin/bitcoin.conf:ro
+    command:
+      - -conf=/data/.bitcoin/bitcoin.conf
+      - -datadir=/data/.bitcoin
+      - -signet=1
+      - -signetchallenge=2103f76323f4878cc45bf819b5da31e2aa1bc6292b9aaef18f7430c0d3764ed846b0ac
+      - -rpcuser=${BITCOIN_RPC_USER}
+      - -rpcpassword=${BITCOIN_RPC_PASSWORD}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bitcoin-cli
+          -signet
+          -rpcuser=${BITCOIN_RPC_USER}
+          -rpcpassword=${BITCOIN_RPC_PASSWORD}
+          getblockchaininfo > /dev/null 2>&1
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  # -------------------------------------------------------------------
+  # LND (signet)
+  # -------------------------------------------------------------------
+  lnd:
+    container_name: lnd-signet
+    ports:
+      - "19735:9735"    # P2P Lightning
+      - "8080:8080"     # REST
+      - "10009:10009"   # gRPC
+    volumes:
+      - ./lnd/lnd-signet.conf:/root/.lnd/lnd.conf:ro
+    command:
+      - --configfile=/root/.lnd/lnd.conf
+      - --noseedbackup
+      - --bitcoin.active
+      - --bitcoin.signet
+      - --bitcoin.node=bitcoind
+      - --bitcoind.rpchost=bitcoind:38332
+      - --bitcoind.rpcuser=${BITCOIN_RPC_USER}
+      - --bitcoind.rpcpass=${BITCOIN_RPC_PASSWORD}
+      - --bitcoind.zmqpubrawblock=tcp://bitcoind:28332
+      - --bitcoind.zmqpubrawtx=tcp://bitcoind:28333
+      - --rpclisten=0.0.0.0:10009
+      - --restlisten=0.0.0.0:8080
+      - --listen=0.0.0.0:9735
+      - --tlsextradomain=lnd
+      - --tlsextradomain=localhost
+      - --tlsextraip=127.0.0.1
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          lncli --network=signet state 2>/dev/null
+          | grep -E '"state": *"RPC_ACTIVE"' > /dev/null
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+  # -------------------------------------------------------------------
+  # LND2 (signet)
+  # -------------------------------------------------------------------
+  lnd2:
+    container_name: lnd2-signet
+    ports:
+      - "19736:9735"    # P2P Lightning
+      - "8081:8081"     # REST
+      - "10010:10009"   # gRPC
+    volumes:
+      - ./lnd/lnd2-signet.conf:/root/.lnd/lnd.conf:ro
+    command:
+      - --configfile=/root/.lnd/lnd.conf
+      - --noseedbackup
+      - --bitcoin.active
+      - --bitcoin.signet
+      - --bitcoin.node=bitcoind
+      - --bitcoind.rpchost=bitcoind:38332
+      - --bitcoind.rpcuser=${BITCOIN_RPC_USER}
+      - --bitcoind.rpcpass=${BITCOIN_RPC_PASSWORD}
+      - --bitcoind.zmqpubrawblock=tcp://bitcoind:28332
+      - --bitcoind.zmqpubrawtx=tcp://bitcoind:28333
+      - --rpclisten=0.0.0.0:10009
+      - --restlisten=0.0.0.0:8081
+      - --listen=0.0.0.0:9735
+      - --tlsextradomain=lnd2
+      - --tlsextradomain=localhost
+      - --tlsextraip=127.0.0.1
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          lncli --network=signet state 2>/dev/null
+          | grep -E '"state": *"RPC_ACTIVE"' > /dev/null
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 60s
+
+  # -------------------------------------------------------------------
+  # LNBits (signet) — macaroon path changes
+  # -------------------------------------------------------------------
+  lnbits:
+    container_name: lnbits-signet
+    environment:
+      LNBITS_SITE_TAGLINE: "Coffee Shop Split Payments - signet"
+      LND_REST_MACAROON_FILE: /lnd_data/data/chain/bitcoin/signet/admin.macaroon
+      LND_GRPC_MACAROON: /lnd_data/data/chain/bitcoin/signet/admin.macaroon

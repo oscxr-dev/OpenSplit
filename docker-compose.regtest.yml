@@ -1,0 +1,334 @@
+# =====================================================================
+# docker-compose.yml
+# Coffee Split Infrastructure - Phase 1 (regtest)
+#
+#   bitcoind  -> Bitcoin Core in regtest mode (RPC + ZMQ)
+#   lnd       -> Lightning Network Daemon, backed by bitcoind
+#   postgres  -> Persistent storage for LNBits
+#   lnbits    -> Lightning wallet & extensions (LndWallet backend)
+#
+# All services share the private bridge network "regtestnet"
+# (172.20.0.0/16). Only the ports needed from the host are published.
+# =====================================================================
+
+name: coffee-split-infra
+
+networks:
+  regtestnet:
+    name: regtestnet
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  bitcoind_data:
+    name: coffee_bitcoind_data
+  lnd_data:
+    name: coffee_lnd_data
+  lnd2_data:
+    name: coffee_lnd2_data
+  postgres_data:
+    name: coffee_postgres_data
+  lnbits_data:
+    name: coffee_lnbits_data
+
+# ---------------------------------------------------------------------
+services:
+# ---------------------------------------------------------------------
+
+  # -------------------------------------------------------------------
+  # Bitcoin Core (regtest)
+  # -------------------------------------------------------------------
+  bitcoind:
+    image: lncm/bitcoind:v26.0
+    container_name: bitcoind
+    restart: unless-stopped
+    networks:
+      regtestnet:
+        ipv4_address: 172.20.0.10
+    ports:
+      - "18443:18443"   # JSON-RPC
+      - "18444:18444"   # P2P
+      - "28332:28332"   # ZMQ rawblock
+      - "28333:28333"   # ZMQ rawtx
+    volumes:
+      - bitcoind_data:/data/.bitcoin
+      - ./bitcoind/bitcoin.conf:/data/.bitcoin/bitcoin.conf:ro
+    command:
+      - -conf=/data/.bitcoin/bitcoin.conf
+      - -datadir=/data/.bitcoin
+      - -rpcuser=${BITCOIN_RPC_USER}
+      - -rpcpassword=${BITCOIN_RPC_PASSWORD}
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          bitcoin-cli
+          -regtest
+          -rpcuser=${BITCOIN_RPC_USER}
+          -rpcpassword=${BITCOIN_RPC_PASSWORD}
+          getblockchaininfo > /dev/null 2>&1
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # -------------------------------------------------------------------
+  # Lightning Network Daemon
+  # -------------------------------------------------------------------
+  lnd:
+    image: lightninglabs/lnd:v0.18.0-beta
+    container_name: lnd
+    restart: unless-stopped
+    depends_on:
+      bitcoind:
+        condition: service_healthy
+    networks:
+      regtestnet:
+        ipv4_address: 172.20.0.20
+    ports:
+      - "9735:9735"     # P2P Lightning
+      - "8080:8080"     # REST
+      - "10009:10009"   # gRPC
+    volumes:
+      - lnd_data:/root/.lnd
+      - ./lnd/lnd.conf:/root/.lnd/lnd.conf:ro
+    command:
+      - --configfile=/root/.lnd/lnd.conf
+      - --noseedbackup
+      - --bitcoin.active
+      - --bitcoin.regtest
+      - --bitcoin.node=bitcoind
+      - --bitcoind.rpchost=bitcoind:18443
+      - --bitcoind.rpcuser=${BITCOIN_RPC_USER}
+      - --bitcoind.rpcpass=${BITCOIN_RPC_PASSWORD}
+      - --bitcoind.zmqpubrawblock=tcp://bitcoind:28332
+      - --bitcoind.zmqpubrawtx=tcp://bitcoind:28333
+      - --rpclisten=0.0.0.0:10009
+      - --restlisten=0.0.0.0:8080
+      - --listen=0.0.0.0:9735
+      - --tlsextradomain=lnd
+      - --tlsextradomain=localhost
+      - --tlsextraip=127.0.0.1
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          lncli --network=regtest state 2>/dev/null
+          | grep -E '"state": *"RPC_ACTIVE"' > /dev/null
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+
+  # -------------------------------------------------------------------
+  # LND2 (second node for testing channels)
+  # -------------------------------------------------------------------
+  lnd2:
+    image: lightninglabs/lnd:v0.18.0-beta
+    container_name: lnd2
+    restart: unless-stopped
+    depends_on:
+      bitcoind:
+        condition: service_healthy
+    networks:
+      regtestnet:
+        ipv4_address: 172.20.0.21
+    ports:
+      - "9736:9735"     # P2P Lightning (different host port)
+      - "8081:8081"     # REST
+      - "10010:10009"   # gRPC
+    volumes:
+      - lnd2_data:/root/.lnd
+      - ./lnd/lnd2.conf:/root/.lnd/lnd.conf:ro
+    command:
+      - --configfile=/root/.lnd/lnd.conf
+      - --noseedbackup
+      - --bitcoin.active
+      - --bitcoin.regtest
+      - --bitcoin.node=bitcoind
+      - --bitcoind.rpchost=bitcoind:18443
+      - --bitcoind.rpcuser=${BITCOIN_RPC_USER}
+      - --bitcoind.rpcpass=${BITCOIN_RPC_PASSWORD}
+      - --bitcoind.zmqpubrawblock=tcp://bitcoind:28332
+      - --bitcoind.zmqpubrawtx=tcp://bitcoind:28333
+      - --rpclisten=0.0.0.0:10009
+      - --restlisten=0.0.0.0:8081
+      - --listen=0.0.0.0:9735
+      - --tlsextradomain=lnd2
+      - --tlsextradomain=localhost
+      - --tlsextraip=127.0.0.1
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          lncli --network=regtest state 2>/dev/null
+          | grep -E '"state": *"RPC_ACTIVE"' > /dev/null
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 45s
+
+  # -------------------------------------------------------------------
+  # Postgres (LNBits persistence)
+  # -------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    restart: unless-stopped
+    networks:
+      regtestnet:
+        ipv4_address: 172.20.0.30
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER:     ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB:       ${POSTGRES_DB}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # -------------------------------------------------------------------
+  # LNBits (LND-backed wallet & extensions)
+  # -------------------------------------------------------------------
+  lnbits:
+    image: lnbits/lnbits:0.12.5
+    container_name: lnbits
+    restart: unless-stopped
+    depends_on:
+      lnd:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      regtestnet:
+        ipv4_address: 172.20.0.40
+    ports:
+      - "5000:5000"
+    volumes:
+      - lnd_data:/lnd_data:ro
+      - lnbits_data:/app/data
+    environment:
+      # --- Server ---
+      HOST: 0.0.0.0
+      PORT: "5000"
+      FORWARDED_ALLOW_IPS: "*"
+
+      # --- Site / branding ---
+      LNBITS_SITE_TITLE: ${LNBITS_SITE_TITLE}
+      LNBITS_SITE_TAGLINE: "Coffee Shop Split Payments - regtest"
+      LNBITS_DENOMINATION: "sats"
+
+      # --- Admin UI ---
+      LNBITS_ADMIN_UI: "true"
+      LNBITS_ADMIN_USERS: ${LNBITS_SUPER_USER_ID}
+      SUPER_USER: ${LNBITS_SUPER_USER_ID}
+      LNBITS_ADMIN_USER: ${LNBITS_ADMIN_USER}
+      LNBITS_ADMIN_PASS: ${LNBITS_ADMIN_PASS}
+
+      # --- Backend wallet: LND via REST ---
+      LNBITS_BACKEND_WALLET_CLASS: LndRestWallet
+      LND_REST_ENDPOINT: "https://lnd:8080"
+      LND_REST_CERT: /lnd_data/tls.cert
+      LND_REST_MACAROON_FILE: /lnd_data/data/chain/bitcoin/regtest/admin.macaroon
+
+      # Some LNBits builds use the gRPC class names; keep both for safety.
+      LND_CERT: /lnd_data/tls.cert
+      LND_MACAROON: /lnd_data/data/chain/bitcoin/regtest/admin.macaroon
+      LND_GRPC_ENDPOINT: lnd
+      LND_GRPC_PORT: "10009"
+      LND_GRPC_CERT: /lnd_data/tls.cert
+      LND_GRPC_MACAROON: /lnd_data/data/chain/bitcoin/regtest/admin.macaroon
+
+      # --- Database (Postgres) ---
+      LNBITS_DATABASE_URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
+
+      # --- Misc ---
+      LNBITS_DATA_FOLDER: /app/data
+      LNBITS_FORCE_HTTPS: "false"
+      LNBITS_RESERVE_FEE_MIN: "2000"
+      LNBITS_RESERVE_FEE_PERCENT: "1.0"
+      LNBITS_DEFAULT_WALLET_NAME: "Coffee Wallet"
+      LNBITS_EXTENSIONS_DEFAULT_INSTALL: "lnurlp,tipjar,splitpayments,withdraw,tpos,lndhub"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          wget -qO- http://127.0.0.1:5000/api/v1/health
+          || wget -qO- http://127.0.0.1:5000/ > /dev/null
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+
+  # -------------------------------------------------------------------
+  # Orchestrator (FastAPI multi-tenant API)
+  # -------------------------------------------------------------------
+  orchestrator:
+    build:
+      context: ./orchestrator
+      dockerfile: Dockerfile
+    container_name: orchestrator
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      lnbits:
+        condition: service_healthy
+    networks:
+      regtestnet:
+        ipv4_address: 172.20.0.50
+    ports:
+      - "8000:8000"
+    environment:
+      ORCHESTRATOR_DB_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/orchestrator
+      ORCHESTRATOR_JWT_SECRET: ${ORCHESTRATOR_JWT_SECRET:-dev-secret-change-me}
+      ORCHESTRATOR_JWT_ALGORITHM: HS256
+      ORCHESTRATOR_LNBITS_INTERNAL_URL: http://lnbits:5000
+      ORCHESTRATOR_LNBITS_WEBHOOK_SECRET: ${ORCHESTRATOR_WEBHOOK_SECRET:-webhook-dev-secret}
+      ORCHESTRATOR_SEED_ADMIN_PASSWORD: ${ORCHESTRATOR_SEED_ADMIN_PASSWORD:-admin123}
+      ORCHESTRATOR_LOG_LEVEL: INFO
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://127.0.0.1:8000/health > /dev/null
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # -------------------------------------------------------------------
+  # Dashboard (PWA frontend — nginx)
+  # -------------------------------------------------------------------
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: dashboard
+    restart: unless-stopped
+    depends_on:
+      - orchestrator
+    networks:
+      regtestnet:
+        ipv4_address: 172.20.0.60
+    ports:
+      - "3000:80"
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - wget -qO- http://127.0.0.1:80/ > /dev/null
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s

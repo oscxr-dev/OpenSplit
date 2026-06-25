@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="OpenSplit">
+  <!-- Temporary neutral OpenSplit identity: a split bar, not coffee. -->
+  <rect width="64" height="64" rx="14" fill="#0a0c12"/>
+  <rect x="12" y="29" width="15" height="6" rx="3" fill="#F7931A"/>
+  <rect x="29" y="29" width="12" height="6" rx="3" fill="#1f8bff"/>
+  <rect x="43" y="29" width="9" height="6" rx="3" fill="#22c55e"/>
+</svg>

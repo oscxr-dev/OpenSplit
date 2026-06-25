@@ -1,0 +1,6 @@
+{
+  "_comment": "Template only. Generate your own signet key and copy this file to signet_keys.json (gitignored). NEVER commit the real private key.",
+  "private_key_hex": "REPLACE_WITH_YOUR_OWN_32_BYTE_PRIVATE_KEY_HEX",
+  "public_key_hex": "REPLACE_WITH_DERIVED_33_BYTE_COMPRESSED_PUBKEY_HEX",
+  "challenge_script_hex": "REPLACE_WITH_SIGNET_CHALLENGE_SCRIPT_HEX"
+}

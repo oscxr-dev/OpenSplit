@@ -1,0 +1,355 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #0a0b12;
+  }
+
+  body {
+    @apply antialiased;
+    min-width: 320px;
+    min-height: 100dvh;
+    background: #0a0b12;
+    color: #f5f5f7;
+    text-rendering: geometricPrecision;
+  }
+
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  button {
+    letter-spacing: 0;
+  }
+}
+
+.opensplit-app,
+.umbrel-app {
+  position: relative;
+  color: #f5f5f7;
+  background:
+    radial-gradient(circle at 18% -10%, rgba(255, 45, 120, 0.1), transparent 28%),
+    linear-gradient(180deg, #11131f 0%, #0a0b12 44%, #0a0b12 100%);
+}
+
+.opensplit-app::before,
+.umbrel-app::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: none;
+}
+
+.umbrel-wallpaper {
+  position: fixed;
+  inset: -5%;
+  background:
+    radial-gradient(circle at 22% 0%, rgba(255, 45, 120, 0.12), transparent 28%),
+    linear-gradient(180deg, #11131f 0%, #0a0b12 42%, #0a0b12 100%);
+}
+
+.umbrel-wallpaper-shade {
+  position: fixed;
+  inset: 0;
+  background:
+    linear-gradient(to bottom, rgba(8, 7, 12, 0.08), rgba(8, 7, 12, 0.28)),
+    radial-gradient(circle at center, transparent 20%, rgba(6, 5, 10, 0.28) 100%);
+}
+
+.brand-logo-image {
+  filter: invert(35%) sepia(96%) saturate(2740%) hue-rotate(317deg) brightness(105%) contrast(103%);
+}
+
+.opensplit-app .text-bitcoin,
+.umbrel-app .text-bitcoin {
+  color: #ff2d78;
+}
+
+.opensplit-app .bg-bitcoin-50,
+.umbrel-app .bg-bitcoin-50 {
+  background-color: rgba(255, 45, 120, 0.08);
+}
+
+.opensplit-app .text-gray-950,
+.opensplit-app .text-gray-900,
+.opensplit-app .text-gray-800,
+.opensplit-app .text-gray-700,
+.umbrel-app .text-gray-950,
+.umbrel-app .text-gray-900,
+.umbrel-app .text-gray-800,
+.umbrel-app .text-gray-700 {
+  color: #f5f5f7;
+}
+
+.opensplit-app .text-gray-600,
+.opensplit-app .text-gray-500,
+.umbrel-app .text-gray-600,
+.umbrel-app .text-gray-500 {
+  color: #94a3b8;
+}
+
+.opensplit-app .text-gray-400,
+.opensplit-app .text-gray-300,
+.umbrel-app .text-gray-400,
+.umbrel-app .text-gray-300 {
+  color: rgba(148, 163, 184, 0.78);
+}
+
+.opensplit-app .border-gray-100,
+.opensplit-app .border-gray-200,
+.umbrel-app .border-gray-100,
+.umbrel-app .border-gray-200 {
+  border-color: rgba(245, 245, 247, 0.08);
+}
+
+.opensplit-app .bg-gray-50,
+.opensplit-app .bg-gray-100,
+.umbrel-app .bg-gray-50,
+.umbrel-app .bg-gray-100 {
+  background-color: rgba(245, 245, 247, 0.04);
+}
+
+.opensplit-app .hover\:bg-gray-50:hover,
+.opensplit-app .hover\:bg-gray-100:hover,
+.umbrel-app .hover\:bg-gray-50:hover,
+.umbrel-app .hover\:bg-gray-100:hover {
+  background-color: rgba(245, 245, 247, 0.07);
+}
+
+.opensplit-app .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+.umbrel-app .divide-gray-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(245, 245, 247, 0.07);
+}
+
+.opensplit-app .bg-red-50\/40,
+.opensplit-app .bg-red-50\/50,
+.opensplit-app .bg-red-100\/70,
+.umbrel-app .bg-red-50\/40,
+.umbrel-app .bg-red-50\/50,
+.umbrel-app .bg-red-100\/70 {
+  background-color: rgba(248, 113, 113, 0.08);
+}
+
+.proof-canvas .allocation-flow-line {
+  stroke-dasharray: none;
+  filter: drop-shadow(0 0 6px rgba(255, 46, 147, 0.14));
+}
+
+.proof-canvas .allocation-hub-blink {
+  animation: opensplit-hub-blink 1.7s ease-in-out 1;
+}
+
+@keyframes opensplit-hub-blink {
+  0%, 28%, 56%, 100% {
+    box-shadow:
+      0 0 0 12px rgba(255, 46, 147, 0.06),
+      0 0 58px rgba(255, 46, 147, 0.16);
+  }
+  14%, 42%, 70% {
+    box-shadow:
+      0 0 0 18px rgba(255, 46, 147, 0.12),
+      0 0 72px rgba(255, 46, 147, 0.24);
+  }
+}
+
+.public-toggle-on {
+  animation: opensplit-public-toggle-glow 1.8s ease-in-out infinite;
+}
+
+@keyframes opensplit-public-toggle-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 4px rgba(249, 115, 22, 0.08), 0 0 14px rgba(249, 115, 22, 0.14);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.14), 0 0 20px rgba(249, 115, 22, 0.22);
+  }
+}
+
+html[data-theme='light'],
+html[data-theme='light'] body {
+  background: #f6f7fb;
+  color: #11131f;
+}
+
+html[data-theme='light'] .opensplit-app,
+html[data-theme='light'] .umbrel-app {
+  color: #11131f;
+  background:
+    radial-gradient(circle at 12% -12%, rgba(255, 45, 120, 0.06), transparent 24%),
+    linear-gradient(180deg, #ffffff 0%, #f8f9fc 44%, #f1f4f9 100%);
+}
+
+html[data-theme='light'] .opensplit-app::before,
+html[data-theme='light'] .umbrel-app::before {
+  background: none;
+}
+
+html[data-theme='light'] .opensplit-app [class~='text-white'],
+html[data-theme='light'] .opensplit-app [class~='text-[#F5F5F7]'],
+html[data-theme='light'] .umbrel-app [class~='text-white'],
+html[data-theme='light'] .umbrel-app [class~='text-[#F5F5F7]'] {
+  color: #11131f;
+}
+
+html[data-theme='light'] .opensplit-app [class~='text-[#94A3B8]'],
+html[data-theme='light'] .opensplit-app [class~='text-white/60'],
+html[data-theme='light'] .opensplit-app [class~='text-white/55'],
+html[data-theme='light'] .opensplit-app [class~='text-white/50'],
+html[data-theme='light'] .opensplit-app [class~='text-white/45'],
+html[data-theme='light'] .opensplit-app [class~='text-white/40'],
+html[data-theme='light'] .umbrel-app [class~='text-[#94A3B8]'],
+html[data-theme='light'] .umbrel-app [class~='text-white/60'],
+html[data-theme='light'] .umbrel-app [class~='text-white/55'],
+html[data-theme='light'] .umbrel-app [class~='text-white/50'],
+html[data-theme='light'] .umbrel-app [class~='text-white/45'],
+html[data-theme='light'] .umbrel-app [class~='text-white/40'] {
+  color: #667085;
+}
+
+html[data-theme='light'] .opensplit-app [class~='text-[#FF2D78]'],
+html[data-theme='light'] .opensplit-app [class~='text-[#FF2E93]'],
+html[data-theme='light'] .umbrel-app [class~='text-[#FF2D78]'] {
+  color: #d91f68;
+}
+
+html[data-theme='light'] .opensplit-app [class*='border-white/'],
+html[data-theme='light'] .umbrel-app [class*='border-white/'] {
+  border-color: rgba(17, 19, 31, 0.1);
+}
+
+html[data-theme='light'] .opensplit-app [class*='bg-white/'],
+html[data-theme='light'] .umbrel-app [class*='bg-white/'] {
+  background-color: rgba(255, 255, 255, 0.78);
+}
+
+html[data-theme='light'] .opensplit-app [class*='bg-black/'],
+html[data-theme='light'] .umbrel-app [class*='bg-black/'] {
+  background-color: rgba(17, 19, 31, 0.045);
+}
+
+html[data-theme='light'] .opensplit-app [class*='bg-[#0A0B12]'],
+html[data-theme='light'] .opensplit-app [class*='bg-[#11131F]'],
+html[data-theme='light'] .umbrel-app [class*='bg-[#0A0B12]'],
+html[data-theme='light'] .umbrel-app [class*='bg-[#11131F]'] {
+  background-color: rgba(255, 255, 255, 0.92);
+}
+
+html[data-theme='light'] .opensplit-app [class*='bg-[#FF2D78]/'],
+html[data-theme='light'] .opensplit-app [class*='bg-[#FF2E93]/'],
+html[data-theme='light'] .umbrel-app [class*='bg-[#FF2D78]/'] {
+  background-color: rgba(255, 45, 120, 0.075);
+}
+
+html[data-theme='light'] .opensplit-app [class*='border-[#FF2D78]/'],
+html[data-theme='light'] .opensplit-app [class*='border-[#FF2E93]/'],
+html[data-theme='light'] .umbrel-app [class*='border-[#FF2D78]/'] {
+  border-color: rgba(255, 45, 120, 0.28);
+}
+
+html[data-theme='light'] .opensplit-app header {
+  background-color: rgba(255, 255, 255, 0.94);
+  border-color: rgba(17, 19, 31, 0.1);
+  box-shadow: 0 12px 40px rgba(17, 19, 31, 0.06);
+}
+
+html[data-theme='light'] .opensplit-app input,
+html[data-theme='light'] .umbrel-app input {
+  background-color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(17, 19, 31, 0.13);
+  color: #11131f;
+}
+
+html[data-theme='light'] .opensplit-app input::placeholder,
+html[data-theme='light'] .umbrel-app input::placeholder {
+  color: #7a8395;
+}
+
+html[data-theme='light'] .opensplit-app table thead {
+  color: #6f7788;
+}
+
+html[data-theme='light'] .opensplit-app nav a[class*='bg-[#FF2D78]/'] {
+  background-color: #fff0f6;
+  border-color: rgba(255, 45, 120, 0.34);
+  color: #11131f;
+}
+
+html[data-theme='light'] .opensplit-app nav a:hover {
+  background-color: rgba(255, 45, 120, 0.055);
+}
+
+html[data-theme='light'] .opensplit-app .proof-canvas,
+html[data-theme='light'] .opensplit-app .split-proof-receipt,
+html[data-theme='light'] .public-proof-page,
+html[data-theme='light'] .proof-canvas [class~='text-white'],
+html[data-theme='light'] .proof-canvas [class~='text-[#F5F5F7]'],
+html[data-theme='light'] .split-proof-receipt [class~='text-white'],
+html[data-theme='light'] .split-proof-receipt [class~='text-[#F5F5F7]'],
+html[data-theme='light'] .public-proof-page [class~='text-white'],
+html[data-theme='light'] .public-proof-page [class~='text-[#F5F5F7]'] {
+  color: #f5f5f7;
+}
+
+html[data-theme='light'] .opensplit-app .proof-canvas [class~='text-[#94A3B8]'],
+html[data-theme='light'] .opensplit-app .split-proof-receipt [class~='text-[#94A3B8]'],
+html[data-theme='light'] .public-proof-page [class~='text-[#94A3B8]'] {
+  color: #94a3b8;
+}
+
+html[data-theme='light'] .opensplit-app .proof-canvas [class~='text-[#FF2D78]'],
+html[data-theme='light'] .opensplit-app .proof-canvas [class~='text-[#FF2E93]'],
+html[data-theme='light'] .opensplit-app .split-proof-receipt [class~='text-[#FF2D78]'],
+html[data-theme='light'] .public-proof-page [class~='text-[#FF2D78]'] {
+  color: #ff2e93;
+}
+
+html[data-theme='light'] .opensplit-app .proof-canvas [class*='bg-[#0A0B12]'],
+html[data-theme='light'] .opensplit-app .split-proof-receipt [class*='bg-[#0A0B12]'],
+html[data-theme='light'] .public-proof-page [class*='bg-[#0A0B12]'] {
+  background-color: #0a0b12;
+}
+
+html[data-theme='light'] .opensplit-app .proof-canvas [class*='bg-[#11131F]'],
+html[data-theme='light'] .opensplit-app .split-proof-receipt [class*='bg-[#11131F]'],
+html[data-theme='light'] .public-proof-page [class*='bg-[#11131F]'] {
+  background-color: rgba(17, 19, 31, 0.96);
+}
+
+html[data-theme='light'] .opensplit-app .proof-canvas [class*='bg-white/'],
+html[data-theme='light'] .opensplit-app .split-proof-receipt [class*='bg-white/'],
+html[data-theme='light'] .public-proof-page [class*='bg-white/'] {
+  background-color: rgba(245, 245, 247, 0.045);
+}
+
+html[data-theme='light'] .opensplit-app .proof-canvas [class*='border-white/'],
+html[data-theme='light'] .opensplit-app .split-proof-receipt [class*='border-white/'],
+html[data-theme='light'] .public-proof-page [class*='border-white/'] {
+  border-color: rgba(245, 245, 247, 0.1);
+}
+
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.4s ease-in-out infinite;
+}
+
+.animate-pulse-dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.animate-pulse-dot:nth-child(3) {
+  animation-delay: 0.4s;
+}

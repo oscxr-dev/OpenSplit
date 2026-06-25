@@ -1,0 +1,15 @@
+{
+  "name": "OpenSplit — Dashboard",
+  "short_name": "OpenSplit",
+  "description": "Dashboard para gestión de cobros Lightning con reparto automático",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#FF2D78",
+  "background_color": "#0A0B12",
+  "categories": ["finance", "business"],
+  "icons": [
+    {"src": "/icons/cubo-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/icons/cubo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+  ]
+}
