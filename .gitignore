@@ -46,3 +46,7 @@ backups/
 *.sql.gz
 *.macaroon
 tls.cert
+
+# Python cache
+__pycache__/
+*.pyc
