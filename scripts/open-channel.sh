@@ -17,7 +17,7 @@ err()  { echo -e "${RED}[err ]${NC} $*" >&2; }
 # -------------------------------------------------------------------
 lncli_lnd()  { docker exec lnd  lncli --network=signet "$@"; }
 lncli_lnd2() { docker exec lnd2 lncli --network=signet "$@"; }
-btc_cli()    { docker exec bitcoind bitcoin-cli -signet -rpcuser=admin -rpcpassword=coffeeshop123 "$@"; }
+btc_cli()    { docker exec bitcoind bitcoin-cli -signet -rpcuser=admin -rpcpassword=opensplitpass "$@"; }
 
 # -------------------------------------------------------------------
 # 1. Check existing channels

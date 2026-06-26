@@ -8,7 +8,7 @@ interface ThemeContextValue {
   setTheme: (theme: Theme) => void;
 }
 
-const STORAGE_KEY = 'coffee-split-theme';
+const STORAGE_KEY = 'opensplit-theme';
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 

@@ -16,7 +16,7 @@ KEYS_PATH = os.path.join(os.path.dirname(__file__), "..", "signet", "signet_keys
 
 
 class RPC:
-    def __init__(self, url="http://127.0.0.1:38332", user="admin", passwd="coffeeshop123"):
+    def __init__(self, url="http://127.0.0.1:38332", user="admin", passwd="opensplitpass"):
         self.url = url
         self.auth = (user, passwd)
 
@@ -141,7 +141,7 @@ def main():
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--rpc-url", default="http://127.0.0.1:38332")
     parser.add_argument("--rpc-user", default="admin")
-    parser.add_argument("--rpc-pass", default="coffeeshop123")
+    parser.add_argument("--rpc-pass", default="opensplitpass")
     args = parser.parse_args()
 
     with open(KEYS_PATH) as f:

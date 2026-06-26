@@ -1,5 +1,5 @@
-const ACCESS_KEY = 'coffeesplit.auth.access';
-const REFRESH_KEY = 'coffeesplit.auth.refresh';
+const ACCESS_KEY = 'opensplit.auth.access';
+const REFRESH_KEY = 'opensplit.auth.refresh';
 
 export function getAccessToken(): string | null {
   return localStorage.getItem(ACCESS_KEY);

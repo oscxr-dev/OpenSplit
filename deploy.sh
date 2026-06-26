@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Coffee Split Infrastructure unified deploy script
+# deploy.sh — OpenSplit Infrastructure unified deploy script
 #
 # Usage:
 #   ./deploy.sh               # Full deploy: build + up

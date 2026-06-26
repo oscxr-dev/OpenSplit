@@ -1,5 +1,5 @@
 #!/bin/bash
-# Quick Docker verification for Coffee Split Infrastructure
+# Quick Docker verification for OpenSplit Infrastructure
 
 echo "🔍 Verificando Docker..."
 
@@ -28,5 +28,5 @@ echo "✅ Docker Compose: $(docker compose version --short)"
 echo "✅ Docker daemon corriendo"
 echo ""
 echo "🚀 Listo para levantar el stack:"
-echo "   cd ~/Desktop/coffee-split-infra"
+echo "   cd /path/to/OpenSplit"
 echo "   ./scripts/setup.sh"

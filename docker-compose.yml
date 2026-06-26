@@ -1,6 +1,6 @@
 # =====================================================================
 # docker-compose.yml
-# Coffee Split Infrastructure - Phase 1 (regtest)
+# OpenSplit Infrastructure - Phase 1 (regtest)
 #
 #   bitcoind  -> Bitcoin Core in regtest mode (RPC + ZMQ)
 #   lnd       -> Lightning Network Daemon, backed by bitcoind

@@ -1,6 +1,6 @@
 # =====================================================================
 # docker-compose.signet.yml
-# Coffee Split Infrastructure - Phase 6 (custom signet override)
+# OpenSplit Infrastructure - Phase 6 (custom signet override)
 #
 # Override for main docker-compose.yml. Run with:
 #   docker compose -f docker-compose.yml -f docker-compose.signet.yml up -d
@@ -130,6 +130,6 @@ services:
   lnbits:
     container_name: lnbits-signet
     environment:
-      LNBITS_SITE_TAGLINE: "Coffee Shop Split Payments - signet"
+      LNBITS_SITE_TAGLINE: "OpenSplit - signet"
       LND_REST_MACAROON_FILE: /lnd_data/data/chain/bitcoin/signet/admin.macaroon
       LND_GRPC_MACAROON: /lnd_data/data/chain/bitcoin/signet/admin.macaroon

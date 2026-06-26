@@ -1,6 +1,6 @@
 -- =====================================================================
 -- init.sql - Postgres bootstrap for LNBits
--- Coffee Split Infrastructure (Phase 1)
+-- OpenSplit Infrastructure (Phase 1)
 -- =====================================================================
 --
 -- LNBits will create its own schema/tables on first start, but we make

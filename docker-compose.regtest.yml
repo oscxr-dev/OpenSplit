@@ -1,6 +1,6 @@
 # =====================================================================
 # docker-compose.yml
-# Coffee Split Infrastructure - Phase 1 (regtest)
+# OpenSplit Infrastructure - Phase 1 (regtest)
 #
 #   bitcoind  -> Bitcoin Core in regtest mode (RPC + ZMQ)
 #   lnd       -> Lightning Network Daemon, backed by bitcoind
@@ -11,7 +11,7 @@
 # (172.20.0.0/16). Only the ports needed from the host are published.
 # =====================================================================
 
-name: coffee-split-infra
+name: opensplit-infra
 
 networks:
   regtestnet:
@@ -24,15 +24,15 @@ networks:
 
 volumes:
   bitcoind_data:
-    name: coffee_bitcoind_data
+    name: opensplit_bitcoind_data
   lnd_data:
-    name: coffee_lnd_data
+    name: opensplit_lnd_data
   lnd2_data:
-    name: coffee_lnd2_data
+    name: opensplit_lnd2_data
   postgres_data:
-    name: coffee_postgres_data
+    name: opensplit_postgres_data
   lnbits_data:
-    name: coffee_lnbits_data
+    name: opensplit_lnbits_data
 
 # ---------------------------------------------------------------------
 services:
@@ -227,7 +227,7 @@ services:
 
       # --- Site / branding ---
       LNBITS_SITE_TITLE: ${LNBITS_SITE_TITLE}
-      LNBITS_SITE_TAGLINE: "Coffee Shop Split Payments - regtest"
+      LNBITS_SITE_TAGLINE: "OpenSplit - regtest"
       LNBITS_DENOMINATION: "sats"
 
       # --- Admin UI ---
@@ -259,7 +259,7 @@ services:
       LNBITS_FORCE_HTTPS: "false"
       LNBITS_RESERVE_FEE_MIN: "2000"
       LNBITS_RESERVE_FEE_PERCENT: "1.0"
-      LNBITS_DEFAULT_WALLET_NAME: "Coffee Wallet"
+      LNBITS_DEFAULT_WALLET_NAME: "OpenSplit Wallet"
       LNBITS_EXTENSIONS_DEFAULT_INSTALL: "lnurlp,tipjar,splitpayments,withdraw,tpos,lndhub"
     healthcheck:
       test:
