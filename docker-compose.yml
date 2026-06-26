@@ -11,7 +11,7 @@
 # (172.31.240.0/20). Only the ports needed from the host are published.
 # =====================================================================
 
-name: coffee-split-infra
+name: opensplit
 
 networks:
   regtestnet:
