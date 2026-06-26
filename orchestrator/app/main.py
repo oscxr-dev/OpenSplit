@@ -73,7 +73,7 @@ app.include_router(public.router, prefix="/api/v1")
 # ── Health ───────────────────────────────────────────────────────────
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
-    db_ok, lnbits_ok = True, True
+    db_ok = True
 
     # DB check
     try:
@@ -83,19 +83,36 @@ async def health() -> HealthResponse:
     except Exception:
         db_ok = False
 
-    # LNBits check (ping first tenant with a key, or just URL)
+    # LNBits check — LNBits is optional in the default BTCPay-first flow. It is
+    # only "enabled" when a tenant is actually configured to use the lnbits
+    # adapter. When no such tenant exists we report "skipped" and do NOT mark
+    # the service degraded. Only an enabled-but-failing LNBits is degrading.
+    lnbits_required = False
+    lnbits_status = "skipped"
     try:
         async for session in get_session():
             from sqlalchemy import select
-            result = await session.execute(select(Tenant).limit(1))
+            result = await session.execute(
+                select(Tenant)
+                .where(Tenant.adapter_type == "lnbits", Tenant.lnbits_admin_key.is_not(None))
+                .limit(1)
+            )
             tenant = result.scalar_one_or_none()
-            if tenant and tenant.lnbits_admin_key:
+            if tenant:
+                lnbits_required = True
                 client = LNBitsClient(tenant.lnbits_admin_key, tenant.lnbits_url)
-                lnbits_ok = await client.ping()
+                lnbits_status = "ok" if await client.ping() else "error"
                 await client.close()
             break
     except Exception:
-        lnbits_ok = False
+        # A failure only matters when LNBits is actually required.
+        if lnbits_required:
+            lnbits_status = "error"
 
-    overall = "ok" if db_ok and lnbits_ok else "degraded"
-    return HealthResponse(status=overall, db="ok" if db_ok else "error", lnbits="ok" if lnbits_ok else "error")
+    overall = "ok"
+    if not db_ok:
+        overall = "degraded"
+    if lnbits_required and lnbits_status != "ok":
+        overall = "degraded"
+
+    return HealthResponse(status=overall, db="ok" if db_ok else "error", lnbits=lnbits_status)

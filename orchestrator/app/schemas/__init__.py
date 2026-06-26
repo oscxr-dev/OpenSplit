@@ -301,5 +301,5 @@ class LNBitsWebhookPayload(BaseModel):
 # ── Health ────────────────────────────────────────────────────────────────
 class HealthResponse(BaseModel):
     status: str  # "ok" | "degraded"
-    db: str
-    lnbits: str
+    db: str  # "ok" | "error"
+    lnbits: str  # "ok" | "error" | "skipped" (skipped when LNBits is not enabled)
