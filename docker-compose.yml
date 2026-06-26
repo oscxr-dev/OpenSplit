@@ -24,15 +24,15 @@ networks:
 
 volumes:
   bitcoind_data:
-    name: coffee_bitcoind_data
+    name: opensplit_bitcoind_data
   lnd_data:
-    name: coffee_lnd_data
+    name: opensplit_lnd_data
   lnd2_data:
-    name: coffee_lnd2_data
+    name: opensplit_lnd2_data
   postgres_data:
-    name: coffee_postgres_data
+    name: opensplit_postgres_data
   lnbits_data:
-    name: coffee_lnbits_data
+    name: opensplit_lnbits_data
 
 # ---------------------------------------------------------------------
 services:
@@ -206,6 +206,8 @@ services:
     image: lnbits/lnbits:0.12.5
     container_name: lnbits
     restart: unless-stopped
+    profiles:
+      - lnbits
     depends_on:
       lnd:
         condition: service_healthy
@@ -227,7 +229,7 @@ services:
 
       # --- Site / branding ---
       LNBITS_SITE_TITLE: ${LNBITS_SITE_TITLE}
-      LNBITS_SITE_TAGLINE: "Coffee Shop Split Payments - regtest"
+      LNBITS_SITE_TAGLINE: "OpenSplit optional LNbits dev adapter"
       LNBITS_DENOMINATION: "sats"
 
       # --- Admin UI ---
@@ -259,8 +261,8 @@ services:
       LNBITS_FORCE_HTTPS: "false"
       LNBITS_RESERVE_FEE_MIN: "2000"
       LNBITS_RESERVE_FEE_PERCENT: "1.0"
-      LNBITS_DEFAULT_WALLET_NAME: "Coffee Wallet"
-      LNBITS_EXTENSIONS_DEFAULT_INSTALL: "lnurlp,tipjar,splitpayments,withdraw,tpos,lndhub"
+      LNBITS_DEFAULT_WALLET_NAME: "OpenSplit Wallet"
+      LNBITS_EXTENSIONS_DEFAULT_INSTALL: "lnurlp,tipjar,withdraw,tpos,lndhub"
     healthcheck:
       test:
         - CMD-SHELL
@@ -283,8 +285,6 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
-        condition: service_healthy
-      lnbits:
         condition: service_healthy
     networks:
       regtestnet:
