@@ -20,7 +20,7 @@ from app.models import SplitRule, SplitTarget, Tenant, User
 # ── Config from env (matching the live regtest LNBits wallets) ─────
 DEMO_TENANT_NAME = os.getenv("SEED_TENANT_NAME", "bitcrew-demo")
 DEMO_BRAND_DISPLAY_NAME = os.getenv("SEED_BRAND_DISPLAY_NAME", "BitCrew")
-DEMO_ADMIN_EMAIL = os.getenv("SEED_ADMIN_EMAIL", "admin@bitcrew.example")
+DEMO_ADMIN_EMAIL = os.getenv("SEED_ADMIN_EMAIL", "oscar@admin.com")
 DEMO_ADMIN_PASSWORD = os.getenv("SEED_ADMIN_PASSWORD", settings.seed_admin_password)
 
 # Existing LNBits wallet IDs (from the live regtest setup)
