@@ -24,10 +24,10 @@ export function BrandMark({ size = 'sm', className, imageClassName }: BrandMarkP
       )}
     >
       <img
-        src="/brand/cubo.png"
+        src="/brand/OpenSplitlogo.svg"
         alt=""
         aria-hidden="true"
-        className={cn('brand-logo-image h-[72%] w-[72%] object-contain', imageClassName)}
+        className={cn('opensplit-logo-icon h-[76%] w-[76%] object-contain', imageClassName)}
       />
     </span>
   );

@@ -1,19 +1,19 @@
-import { CheckCircle, ReceiptText, ShieldCheck } from 'lucide-react';
+import { Globe2, ReceiptText, ShieldCheck } from 'lucide-react';
 import { useParams } from 'react-router-dom';
-import { usePublicTransparency } from '@/hooks/usePublicTransparency';
-import { BrandMark } from '@/components/brand/BrandMark';
+import { TopBar } from '@/components/layout/TopBar';
+import { ErrorState } from '@/components/shared/ErrorState';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { formatDateShort, formatSats } from '@/lib/utils';
+import { usePublicTransparency } from '@/hooks/usePublicTransparency';
 import { truncateMiddle } from '@/lib/transparency';
-import type { PublicSplitMember } from '@/types/api';
+import type { PublicSplitMember, PublicSplitRule } from '@/types/api';
 
-const publicNodePositions = [
+const orbitNodes = [
   { x: 50, y: 16 },
-  { x: 78, y: 42 },
-  { x: 63, y: 79 },
-  { x: 24, y: 63 },
-  { x: 25, y: 35 },
-  { x: 50, y: 82 },
+  { x: 78, y: 39 },
+  { x: 63, y: 80 },
+  { x: 22, y: 65 },
+  { x: 23, y: 33 },
+  { x: 50, y: 84 },
 ];
 
 function publicLabel(member: PublicSplitMember) {
@@ -22,59 +22,105 @@ function publicLabel(member: PublicSplitMember) {
   return 'Public partner';
 }
 
-function PublicTeamMap({ members, name }: { members: PublicSplitMember[]; name: string }) {
+function compactName(name: string) {
+  const [first, last] = name.split(' ');
+  return last ? `${first} ${last.charAt(0).replace('.', '')}.` : first;
+}
+
+function channelAngle(node: { x: number; y: number }) {
+  const dx = node.x - 50;
+  const dy = node.y - 50;
+  return (Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360;
+}
+
+function allocationRing(share: number, angle: number) {
+  const degrees = Math.min(360, Math.max(0, share * 3.6));
+  const connectionAngle = (angle + 180) % 360;
+  const start = connectionAngle - degrees / 2;
+
+  return `conic-gradient(from ${start}deg, rgba(255,46,147,0.92) 0deg ${degrees}deg, rgba(154,164,178,0.14) ${degrees}deg 360deg)`;
+}
+
+function nodeSize(share: number) {
+  const size = Math.max(82, Math.min(116, 80 + share * 0.7));
+  return `clamp(76px, ${(size / 6).toFixed(2)}vw, ${size}px)`;
+}
+
+function PublicRuleGraph({ rule, teamName }: { rule: PublicSplitRule; teamName: string }) {
+  const members = rule.distribution.filter((member) => member.percentage > 0);
+  const total = members.reduce((sum, member) => sum + member.percentage, 0);
+
   return (
     <div
-      className="relative min-h-[320px] overflow-hidden rounded-lg border border-white/[0.08] bg-[#0A0B12]"
+      className="relative min-h-[430px] overflow-hidden rounded-xl border border-[#2A2D3A] bg-[#11121A] p-4 shadow-[inset_0_1px_0_rgba(245,245,247,0.055),0_24px_70px_rgba(0,0,0,0.18)] sm:min-h-[500px] sm:p-6 lg:p-8"
       style={{
         background:
-          'radial-gradient(circle at 50% 50%, rgba(255,45,120,0.11), rgba(17,19,31,0.54) 33%, rgba(10,11,18,0.98) 74%)',
+          'radial-gradient(circle at 50% 50%, rgba(255,46,147,0.12), rgba(82,34,64,0.11) 25%, rgba(24,26,38,0.86) 54%, rgba(17,18,26,0.98) 100%), linear-gradient(145deg, #181A26 0%, #12111B 54%, #11121A 100%)',
       }}
     >
-      <div className="absolute left-1/2 top-1/2 h-[74%] w-[74%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/[0.055]" />
-      <div className="absolute left-1/2 top-1/2 h-[46%] w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#FF2D78]/12" />
+      <div className="absolute left-4 top-4 z-30 rounded-full border border-[#FF2E93]/18 bg-[#151722]/88 px-3 py-1.5 text-xs font-semibold text-[#F5F5F7] backdrop-blur">
+        {rule.name} <span className="font-mono text-[#9AA4B2]">v{rule.version}</span>
+      </div>
+
+      <div className="absolute right-4 top-4 z-30 rounded-full border border-[#2A2D3A] bg-[#151722]/88 px-3 py-1.5 font-mono text-xs font-semibold text-[#FF2E93] backdrop-blur">
+        {total}% public
+      </div>
+
+      <div className="absolute left-1/2 top-1/2 h-[78%] w-[78%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#9AA4B2]/[0.035] sm:h-[86%] sm:w-[86%]" />
+      <div className="absolute left-1/2 top-1/2 h-[58%] w-[58%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#FF2E93]/[0.055] sm:h-[66%] sm:w-[66%]" />
+      <div className="absolute left-1/2 top-1/2 h-[36%] w-[36%] -translate-x-1/2 -translate-y-1/2 rounded-full border border-[#9AA4B2]/[0.045] sm:h-[42%] sm:w-[42%]" />
 
       <svg className="pointer-events-none absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none">
         {members.map((member, index) => {
-          const node = publicNodePositions[index % publicNodePositions.length];
+          const node = orbitNodes[index % orbitNodes.length];
 
           return (
             <line
-              key={member.nostr_pubkey || member.label || index}
+              key={`${publicLabel(member)}-${index}`}
               x1="50"
               y1="50"
               x2={node.x}
               y2={node.y}
-              stroke="rgba(255,45,120,0.46)"
+              stroke="rgba(255,46,147,0.28)"
               strokeLinecap="round"
-              strokeWidth={Math.max(0.45, member.percentage / 18)}
+              strokeWidth={Math.max(0.65, Math.min(2.2, member.percentage / 24))}
             />
           );
         })}
       </svg>
 
-      <div className="absolute left-1/2 top-1/2 z-20 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-[#FF2D78]/32 bg-[#11131F] text-center shadow-[0_0_38px_rgba(255,45,120,0.18)]">
-        <p className="px-3 text-sm font-semibold leading-4 text-[#F5F5F7]">{name}</p>
-        <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[#94A3B8]">BTCPay</p>
+      <div className="absolute left-1/2 top-1/2 z-20 flex h-32 w-32 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-[#FF2E93]/32 bg-[#151722] text-center shadow-[0_0_0_10px_rgba(255,46,147,0.045),0_0_58px_rgba(255,46,147,0.16)] sm:h-40 sm:w-40">
+        <Globe2 className="h-6 w-6 text-[#FF2E93]" strokeWidth={1.8} />
+        <p className="mt-3 px-4 text-sm font-semibold leading-5 text-[#F5F5F7]">{teamName}</p>
+        <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#9AA4B2]">public proof</p>
       </div>
 
       {members.map((member, index) => {
-        const node = publicNodePositions[index % publicNodePositions.length];
-        const size = 46 + member.percentage * 0.78;
+        const node = orbitNodes[index % orbitNodes.length];
+        const angle = channelAngle(node);
+        const size = nodeSize(member.percentage);
 
         return (
           <div
-            key={member.nostr_pubkey || member.label || index}
-            className="absolute z-30 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/[0.11] bg-[#11131F]/95 text-center shadow-[0_14px_32px_rgba(0,0,0,0.30)]"
+            key={`${publicLabel(member)}-${index}`}
+            className="absolute z-30 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full p-[2px] text-center"
             style={{
               left: `${node.x}%`,
               top: `${node.y}%`,
               width: size,
               height: size,
+              background: allocationRing(member.percentage, angle),
+              boxShadow: '0 16px 36px rgba(0,0,0,0.30)',
             }}
           >
-            <span className="max-w-[74px] truncate px-2 text-[11px] font-semibold text-[#F5F5F7]">{publicLabel(member)}</span>
-            <span className="mt-1 font-mono text-[11px] text-[#FF2D78]">{member.percentage}%</span>
+            <span className="flex h-full w-full flex-col items-center justify-center rounded-full border border-[#9AA4B2]/[0.16] bg-[#171722] px-3">
+              <span className="max-w-[86px] truncate text-xs font-semibold leading-tight text-[#F5F5F7] sm:text-sm">
+                {compactName(publicLabel(member))}
+              </span>
+              <span className="mt-1 font-mono text-[24px] font-semibold leading-none tracking-tight text-[#FF2E93] sm:text-[28px]">
+                {member.percentage}%
+              </span>
+            </span>
           </div>
         );
       })}
@@ -84,182 +130,97 @@ function PublicTeamMap({ members, name }: { members: PublicSplitMember[]; name: 
 
 export function PublicTransparencyPage() {
   const { slug } = useParams<{ slug: string }>();
-  const { data, isLoading, isError } = usePublicTransparency(slug);
+  const { data, isLoading, isError, refetch } = usePublicTransparency(slug);
+  const publicRules = data?.public_rules ?? [];
+  const publicPartnerCount = publicRules.reduce((sum, rule) => sum + rule.distribution.length, 0);
+  const completedSplitCount = publicRules.reduce((sum, rule) => sum + rule.completed_split_count, 0);
 
   return (
-    <div
-      className="public-proof-page min-h-screen bg-[#0A0B12] text-[#F5F5F7]"
-      style={{
-        background:
-          'radial-gradient(circle at 22% 0%, rgba(255,45,120,0.11), transparent 28%), linear-gradient(180deg, #11131F 0%, #0A0B12 42%, #0A0B12 100%)',
-      }}
-    >
-      <header className="border-b border-white/[0.06]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-5 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-3">
-            <BrandMark size="sm" />
-            <div>
-              <p className="font-semibold text-[#F5F5F7]">{data?.name ?? 'OpenSplit'}</p>
-              <p className="mt-1 font-mono text-xs text-[#94A3B8]">/public/{slug ?? 'workspace'}</p>
-            </div>
-          </div>
+    <div className="opensplit-app min-h-screen pt-20 text-[#F5F5F7] lg:pt-[68px]">
+      <TopBar />
 
-          <div className="hidden items-center gap-2 rounded-full border border-[#FF2D78]/20 bg-[#FF2D78]/[0.055] px-3 py-1.5 text-xs font-semibold text-[#F5F5F7] sm:inline-flex">
-            <CheckCircle className="h-3.5 w-3.5 text-[#FF2D78]" strokeWidth={1.8} />
-            Public proof
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-6xl space-y-5 px-4 py-6 sm:px-6 lg:px-8">
+      <main className="mx-auto max-w-6xl space-y-5 px-4 pb-32 pt-6 sm:px-6 md:pb-6 lg:px-8">
         {isLoading && (
-          <div className="space-y-6">
-            <Skeleton className="h-12 w-64" />
-            <Skeleton className="h-40 w-full" />
-            <Skeleton className="h-56 w-full" />
+          <div className="space-y-5">
+            <div className="grid gap-4 lg:grid-cols-2">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-32 w-full" />
+            </div>
+            <Skeleton className="h-[500px] w-full" />
           </div>
         )}
 
         {(!slug || isError) && (
-          <div className="flex min-h-[60vh] flex-col items-center justify-center text-center">
-            <h1 className="text-3xl font-semibold text-[#F5F5F7]">Public page unavailable</h1>
-            <p className="mt-3 max-w-md text-sm text-[#94A3B8]">
-              This proof page is disabled, missing, or not published yet.
-            </p>
-          </div>
+          <ErrorState
+            message="This proof page is disabled, missing, or not published yet."
+            onRetry={() => refetch()}
+          />
         )}
 
         {data && (
           <>
-            <section className="grid gap-6 lg:grid-cols-[1.08fr_0.92fr]">
-              <div className="rounded-lg border border-white/[0.08] bg-[#11131F]/62 p-5 shadow-[inset_0_1px_0_rgba(245,245,247,0.07)] sm:p-6">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FF2D78]">Public split proof</p>
-                <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[#F5F5F7] sm:text-4xl">
-                  {data.name}
-                </h1>
-                <p className="mt-3 max-w-2xl text-base leading-7 text-[#94A3B8]">
-                  Incoming Bitcoin payments are published as split proofs: clear percentages, public identities,
-                  and no private wallet details.
-                </p>
-
-                <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-lg border border-white/[0.07] bg-[#0A0B12]/64 p-4">
-                    <p className="text-xs text-[#94A3B8]">Active partners</p>
-                    <p className="mt-2 font-mono text-sm font-semibold text-[#F5F5F7]">{data.distribution.length}</p>
-                  </div>
-                  <div className="rounded-lg border border-white/[0.07] bg-[#0A0B12]/64 p-4">
-                    <p className="text-xs text-[#94A3B8]">Published payments</p>
-                    <p className="mt-2 font-mono text-sm font-semibold text-[#F5F5F7]">{data.recent_payments.length}</p>
-                  </div>
-                  <div className="rounded-lg border border-white/[0.07] bg-[#0A0B12]/64 p-4">
-                    <p className="text-xs text-[#94A3B8]">Total routed</p>
-                    <p className="mt-2 font-mono text-sm font-semibold text-[#F5F5F7]">
-                      {data.show_amounts && data.total_sats != null ? formatSats(data.total_sats) : 'redacted'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <aside className="rounded-lg border border-[#FF2D78]/18 bg-[#11131F]/72 p-5 shadow-[0_24px_70px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(245,245,247,0.07)]">
+            <section className="grid gap-4 lg:grid-cols-2">
+              <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 shadow-[inset_0_1px_0_rgba(245,245,247,0.05)]">
                 <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#FF2D78]/24 bg-[#FF2D78]/10">
-                    <ReceiptText className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#FF2E93]/22 bg-[#FF2E93]/10 text-[#FF2E93]">
+                    <ReceiptText className="h-5 w-5" strokeWidth={1.8} />
                   </div>
-                  <div>
-                    <p className="font-semibold text-[#F5F5F7]">Transparency status</p>
-                    <p className="mt-1 text-xs text-[#94A3B8]">No private wallet data published</p>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FF2E93]">Public proof summary</p>
+                    <h1 className="mt-1 truncate text-xl font-semibold text-[#F5F5F7]">{data.name}</h1>
                   </div>
                 </div>
-
-                <dl className="mt-6 space-y-3 text-sm">
-                  <div className="flex items-center justify-between gap-4">
-                    <dt className="text-[#94A3B8]">Amounts</dt>
-                    <dd className="font-mono font-semibold text-[#F5F5F7]">{data.show_amounts ? 'public' : 'redacted'}</dd>
+                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2">
+                    <p className="font-mono text-lg font-semibold text-[#F5F5F7]">{publicRules.length}</p>
+                    <p className="text-[11px] text-[#94A3B8]">rules</p>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <dt className="text-[#94A3B8]">Split total</dt>
-                    <dd className="font-mono font-semibold text-[#F5F5F7]">
-                      {data.distribution.reduce((sum, member) => sum + member.percentage, 0)}%
-                    </dd>
+                  <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2">
+                    <p className="font-mono text-lg font-semibold text-[#F5F5F7]">{publicPartnerCount}</p>
+                    <p className="text-[11px] text-[#94A3B8]">partners</p>
                   </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <dt className="text-[#94A3B8]">Route</dt>
-                    <dd className="font-mono font-semibold text-[#F5F5F7]">/public/{data.slug}</dd>
+                  <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2">
+                    <p className="font-mono text-lg font-semibold text-[#F5F5F7]">{completedSplitCount}</p>
+                    <p className="text-[11px] text-[#94A3B8]">splits</p>
                   </div>
-                </dl>
-              </aside>
-            </section>
-
-            <section className="grid gap-6 lg:grid-cols-[0.88fr_1.12fr]">
-              <div className="rounded-lg border border-white/[0.08] bg-[#11131F]/56 p-5 shadow-[inset_0_1px_0_rgba(245,245,247,0.07)]">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#94A3B8]">Active split</p>
-                    <h2 className="mt-2 text-xl font-semibold text-[#F5F5F7]">Published distribution</h2>
-                  </div>
-                  <ShieldCheck className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
                 </div>
-
-                {!data.distribution.length ? (
-                  <p className="mt-6 text-sm text-[#94A3B8]">No active split has been published.</p>
-                ) : (
-                  <div className="mt-6 space-y-4">
-                    <div className="flex h-2 overflow-hidden rounded-full border border-white/[0.07] bg-[#0A0B12]/70">
-                      {data.distribution.map((member, index) => (
-                        <span
-                          key={member.nostr_pubkey || member.label || index}
-                          className="bg-[#FF2D78]"
-                          style={{ width: `${member.percentage}%`, opacity: 1 - index * 0.12 }}
-                        />
-                      ))}
-                    </div>
-                    <div className="divide-y divide-white/[0.06]">
-                      {data.distribution.map((member, index) => (
-                        <div key={member.nostr_pubkey || member.label || index} className="flex items-center justify-between gap-4 py-3">
-                          <div className="flex min-w-0 items-center gap-2">
-                            <span className="h-2 w-2 shrink-0 rounded-full bg-[#FF2D78]" style={{ opacity: 1 - index * 0.12 }} />
-                            <span className="truncate text-sm text-[#F5F5F7]">{publicLabel(member)}</span>
-                          </div>
-                          <span className="font-mono font-semibold text-[#F5F5F7]">{member.percentage}%</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
 
-              <div className="rounded-lg border border-white/[0.08] bg-[#11131F]/56 p-3 shadow-[inset_0_1px_0_rgba(245,245,247,0.07)]">
-                <PublicTeamMap members={data.distribution} name={data.name} />
+              <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 shadow-[inset_0_1px_0_rgba(245,245,247,0.05)]">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-[#FF2E93]/22 bg-[#FF2E93]/10 text-[#FF2E93]">
+                    <ShieldCheck className="h-5 w-5" strokeWidth={1.8} />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FF2E93]">Transparency status</p>
+                    <p className="mt-1 truncate text-xl font-semibold text-[#F5F5F7]">Private data hidden</p>
+                  </div>
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2">
+                    <p className="text-[11px] text-[#94A3B8]">Wallet data</p>
+                    <p className="mt-1 text-sm font-semibold text-[#F5F5F7]">not shown</p>
+                  </div>
+                  <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2">
+                    <p className="text-[11px] text-[#94A3B8]">Recent activity</p>
+                    <p className="mt-1 font-mono text-sm font-semibold text-[#F5F5F7]">{data.recent_payments.length}</p>
+                  </div>
+                </div>
               </div>
             </section>
 
-            <section className="rounded-lg border border-white/[0.08] bg-[#11131F]/56 shadow-[inset_0_1px_0_rgba(245,245,247,0.07)]">
-              <div className="flex items-center justify-between gap-4 border-b border-white/[0.06] p-5">
-                <div>
-                  <h2 className="font-semibold text-[#F5F5F7]">Recent payment proofs</h2>
-                  <p className="mt-1 text-sm text-[#94A3B8]">Public amounts when enabled, verified split records always.</p>
+            <section className="space-y-4">
+              {!publicRules.length ? (
+                <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-8 text-center">
+                  <ShieldCheck className="mx-auto h-8 w-8 text-[#FF2E93]" strokeWidth={1.8} />
+                  <p className="mt-4 text-lg font-semibold text-[#F5F5F7]">
+                    No public split rule has been published yet.
+                  </p>
                 </div>
-              </div>
-
-              {!data.recent_payments.length ? (
-                <p className="p-5 text-sm text-[#94A3B8]">No public payments yet.</p>
               ) : (
-                <div className="divide-y divide-white/[0.06]">
-                  {data.recent_payments.map((payment, index) => (
-                    <div key={index} className="grid gap-4 p-5 sm:grid-cols-[1fr_auto] sm:items-center">
-                      <div className="min-w-0">
-                        <p className="font-mono text-base font-semibold text-[#F5F5F7]">
-                          {data.show_amounts && payment.amount_sats != null ? formatSats(payment.amount_sats) : 'amount redacted'}
-                        </p>
-                        <p className="mt-1 font-mono text-xs text-[#94A3B8]">{formatDateShort(payment.paid_at)}</p>
-                      </div>
-                      <span className="inline-flex items-center gap-1.5 rounded-full border border-[#FF2D78]/22 bg-[#FF2D78]/[0.055] px-3 py-1 text-xs font-semibold text-[#FF2D78]">
-                        <CheckCircle className="h-3.5 w-3.5" strokeWidth={1.8} />
-                        {payment.status}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                publicRules.map((rule, index) => (
+                  <PublicRuleGraph key={`${rule.name}-${rule.version}-${index}`} rule={rule} teamName={data.name} />
+                ))
               )}
             </section>
           </>

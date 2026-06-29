@@ -10,11 +10,13 @@ from datetime import datetime, timezone
 
 from app.routers.public import (
     PublicPaymentRow,
+    PublicRuleRow,
     PublicTargetRow,
     build_public_view,
 )
 from app.schemas import (
     PublicRecentPayment,
+    PublicSplitRule,
     PublicSplitMember,
     PublicTransparencyResponse,
 )
@@ -39,6 +41,31 @@ def test_distribution_carries_only_public_identity_and_percentage():
     assert [m.label for m in view.distribution] == ["Barista", None]
     assert [m.nostr_pubkey for m in view.distribution] == [None, "npub1xyz"]
     assert [m.percentage for m in view.distribution] == [60.0, 40.0]
+
+
+def test_public_rules_carry_only_public_rule_metadata():
+    view = build_public_view(
+        name="Coffee Co",
+        slug="coffee",
+        show_amounts=True,
+        targets=_TARGETS,
+        payments=[],
+        total_paid_sats=0,
+        public_rules=[
+            PublicRuleRow(
+                name="Weekend split",
+                version=3,
+                completed_split_count=4,
+                targets=_TARGETS,
+            )
+        ],
+    )
+    assert len(view.public_rules) == 1
+    rule = view.public_rules[0]
+    assert rule.name == "Weekend split"
+    assert rule.version == 3
+    assert rule.completed_split_count == 4
+    assert [member.percentage for member in rule.distribution] == [60.0, 40.0]
 
 
 def test_amounts_shown_when_show_amounts_true():
@@ -71,7 +98,7 @@ def test_public_schemas_expose_no_private_fields():
         "api_key", "btcpay_api_key", "lnbits_admin_key", "store_id",
         "btcpay_store_id", "webhook_secret", "btcpay_webhook_secret", "email",
     }
-    for model in (PublicTransparencyResponse, PublicSplitMember, PublicRecentPayment):
+    for model in (PublicTransparencyResponse, PublicSplitRule, PublicSplitMember, PublicRecentPayment):
         leaked = forbidden & set(model.model_fields)
         assert not leaked, f"{model.__name__} exposes private fields: {leaked}"
 
@@ -83,8 +110,9 @@ def test_serialized_payload_contains_no_private_values():
     )
     dumped = view.model_dump()
     assert set(dumped.keys()) == {
-        "name", "slug", "show_amounts", "distribution", "recent_payments", "total_sats",
+        "name", "slug", "show_amounts", "public_rules", "distribution", "recent_payments", "total_sats",
     }
+    assert dumped["public_rules"] == []
     for member in dumped["distribution"]:
         assert set(member.keys()) == {"label", "nostr_pubkey", "percentage"}
     for payment in dumped["recent_payments"]:

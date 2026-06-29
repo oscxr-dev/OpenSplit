@@ -7,13 +7,11 @@ import { useInvoices } from '@/hooks/useInvoices';
 import { useSplits } from '@/hooks/useSplits';
 import { TeamMap } from '@/components/team/TeamMap';
 import { SplitRulesSection } from '@/components/team/SplitRulesSection';
-import { Card, CardContent } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
-import { formatDateShort, formatSats } from '@/lib/utils';
-import { memberPayoutHealth, truncateMiddle } from '@/lib/transparency';
+import { PaymentsPanel } from '@/components/payments/PaymentsPanel';
+import { cn } from '@/lib/utils';
 
 const ACTIVE_PAYOUT_STATUSES = ['pending', 'in_progress'];
 const RECENT_PAYMENT_WINDOW_MS = 10 * 60 * 1000;
@@ -81,7 +79,54 @@ export function MembersPage() {
     [data]
   );
   const workspaceName = tenant?.tenant.brand_display_name || tenant?.tenant.name || 'OpenSplit';
-  const failedCount = members.reduce((sum, member) => sum + member.failed_count, 0);
+
+  // Active split rules drive the tabs attached to the top of the graph.
+  const activeRules = useMemo(() => (splits ?? []).filter((rule) => rule.active), [splits]);
+  const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+
+  // Keep the selected tab on a still-active rule; fall back to the first active
+  // rule when the selection is deactivated or removed.
+  useEffect(() => {
+    if (activeRules.length === 0) {
+      if (selectedRuleId !== null) setSelectedRuleId(null);
+      return;
+    }
+    if (!selectedRuleId || !activeRules.some((rule) => rule.id === selectedRuleId)) {
+      setSelectedRuleId(activeRules[0].id);
+    }
+  }, [activeRules, selectedRuleId]);
+
+  const selectedRule = useMemo(
+    () => activeRules.find((rule) => rule.id === selectedRuleId) ?? activeRules[0],
+    [activeRules, selectedRuleId]
+  );
+
+  // Safari-style tabs that attach to the top border of the graph card below.
+  const ruleTabs = activeRules.length > 0 ? (
+    <div className="os-rule-tabs relative z-10 -mb-px flex gap-1 overflow-x-auto" role="tablist" aria-label="Active split rules">
+      {activeRules.map((rule) => {
+        const selected = rule.id === selectedRule?.id;
+        return (
+          <button
+            key={rule.id}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            onClick={() => setSelectedRuleId(rule.id)}
+            className={cn(
+              'inline-flex shrink-0 items-center gap-2 rounded-t-lg border px-3.5 py-2 text-sm font-medium transition-colors',
+              selected
+                ? 'border-[#2A2D3A] border-b-transparent bg-[#11121A] text-[#F5F5F7] shadow-[inset_0_2px_0_0_#FF2E93]'
+                : 'border-transparent bg-transparent text-[#9AA4B2] hover:bg-white/[0.04] hover:text-[#F5F5F7]'
+            )}
+          >
+            <span className={cn('h-1.5 w-1.5 rounded-full', selected ? 'bg-[#FF2E93]' : 'bg-[#9AA4B2]/50')} />
+            <span className="max-w-[160px] truncate">{rule.name}</span>
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
 
   function openSplitRules() {
     setSplitEditorKey((value) => value + 1);
@@ -105,16 +150,16 @@ export function MembersPage() {
 
   return (
     <div className="space-y-8">
-      {!members.length ? (
+      {activeRules.length === 0 ? (
         <EmptyState
           icon={<Users className="h-8 w-8 text-[#94A3B8]" />}
-          message="No partners yet"
-          description="Create a split rule to define who receives the next Bitcoin payment."
+          message="No active split"
+          description="Activate a rule from the library below to map who receives the next Bitcoin payment."
           actionLabel="Create split rule"
           onAction={openSplitRules}
         />
       ) : (
-        <TeamMap members={members} workspaceName={workspaceName} />
+        <TeamMap members={members} workspaceName={workspaceName} selectedRule={selectedRule} tabsSlot={ruleTabs} />
       )}
 
       <div ref={splitSectionRef}>
@@ -128,67 +173,8 @@ export function MembersPage() {
         />
       </div>
 
-      {!!members.length && (
-        <Card className="bg-[#11131F]/48 shadow-none">
-          <CardContent className="p-0">
-            <div className="flex items-center justify-between border-b border-white/[0.07] p-5">
-              <div className="flex items-center gap-3">
-                <Users className="h-5 w-5 text-[#94A3B8]" strokeWidth={1.8} />
-                <div>
-                  <h2 className="font-semibold text-[#F5F5F7]">Team partners</h2>
-                  <p className="mt-1 text-sm text-[#94A3B8]">
-                    {members.length} partners · {failedCount} payouts need attention
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[760px] text-left text-sm">
-                <thead className="border-b border-white/[0.06] text-xs uppercase tracking-[0.12em] text-[#94A3B8]">
-                  <tr>
-                    <th className="px-5 py-3 font-semibold">Partner</th>
-                    <th className="px-5 py-3 font-semibold">npub</th>
-                    <th className="px-5 py-3 font-semibold">Share</th>
-                    <th className="px-5 py-3 font-semibold">Settled</th>
-                    <th className="px-5 py-3 font-semibold">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[0.06]">
-                  {members.map((member, index) => {
-                    const health = memberPayoutHealth(member.failed_count);
-                    return (
-                      <tr key={`${member.label}-${member.nostr_pubkey ?? member.ln_address ?? index}`} className="transition hover:bg-white/[0.025]">
-                        <td className="px-5 py-4">
-                          <p className="font-medium text-[#F5F5F7]">{member.label}</p>
-                          <p className="mt-1 text-xs text-[#94A3B8]">
-                            {member.payment_count} splits · last {formatDateShort(member.last_payment_at)}
-                            {member.collision && ' · identity overlap'}
-                          </p>
-                        </td>
-                        <td className="px-5 py-4">
-                          <span className="font-mono text-xs text-[#94A3B8]">
-                            {member.nostr_pubkey ? truncateMiddle(member.nostr_pubkey) : 'not published'}
-                          </span>
-                        </td>
-                        <td className="px-5 py-4 font-mono font-semibold text-[#F5F5F7]">
-                          {member.current_percentage != null ? `${member.current_percentage}%` : '—'}
-                        </td>
-                        <td className="px-5 py-4 font-mono text-[#94A3B8]">{formatSats(member.total_paid_sats)}</td>
-                        <td className="px-5 py-4">
-                          <Badge variant={health === 'failed' ? 'error' : 'success'}>
-                            {health === 'failed' ? 'Needs retry' : 'Active'}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Recent payments — replaces the old "Team partners" table. */}
+      <PaymentsPanel />
     </div>
   );
 }

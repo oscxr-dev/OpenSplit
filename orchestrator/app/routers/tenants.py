@@ -46,6 +46,15 @@ async def update_my_tenant(
         tenant.name = body.name
     if body.lnbits_url is not None:
         tenant.lnbits_url = body.lnbits_url
+    if body.public_slug is not None:
+        # Already normalized (lowercase, url-safe) by the schema validator.
+        tenant.public_slug = body.public_slug
+    if body.public_transparency_enabled is not None:
+        tenant.public_transparency_enabled = body.public_transparency_enabled
+    if body.public_country is not None:
+        tenant.public_country = body.public_country
+    if body.public_city is not None:
+        tenant.public_city = body.public_city
     await session.commit()
     await session.refresh(tenant)
     return TenantResponse.model_validate(tenant)

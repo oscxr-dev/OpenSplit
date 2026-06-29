@@ -40,6 +40,10 @@ class Tenant(Base):
     public_slug: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     public_transparency_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     public_show_amounts: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Optional coarse public location for the Public Teams map (country/city level
+    # only — never a precise address or coordinates). NULL => "Unknown location".
+    public_country: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    public_city: Mapped[str | None] = mapped_column(String(120), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -74,6 +78,7 @@ class SplitRule(Base):
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     active: Mapped[bool] = mapped_column(Boolean, default=False)
+    public_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     version: Mapped[int] = mapped_column(Integer, default=1)
     parent_rule_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("split_rules.id"), nullable=True
@@ -127,6 +132,8 @@ class Payment(Base):
     invoice_id: Mapped[str] = mapped_column(String(64), nullable=True)
     bolt11: Mapped[str] = mapped_column(Text, nullable=True)
     amount_sats: Mapped[int] = mapped_column(Integer, nullable=False)
+    unallocated_store_sats: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    pending_remainder_sats: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
     memo: Mapped[str] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | in_progress | paid | partial | failed
     split_rule_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("split_rules.id"), nullable=True)

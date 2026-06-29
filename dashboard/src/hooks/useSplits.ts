@@ -58,6 +58,39 @@ export function useActivateSplit() {
   });
 }
 
+export function useDeactivateSplit() {
+  const queryClient = useQueryClient();
+
+  return useMutation<SplitRule, Error, string>({
+    mutationFn: async (id) => {
+      const res = await api.post(`/splits/${id}/deactivate`);
+      return res.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['splits'] });
+      queryClient.invalidateQueries({ queryKey: ['members'] });
+    },
+  });
+}
+
+export function useToggleSplitPublic() {
+  const queryClient = useQueryClient();
+
+  return useMutation<SplitRule, Error, { id: string; public_enabled: boolean; slug?: string | null }>({
+    mutationFn: async ({ id, public_enabled }) => {
+      const res = await api.patch(`/splits/${id}/public`, { public_enabled });
+      return res.data;
+    },
+    onSuccess: (_rule, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['splits'] });
+      queryClient.invalidateQueries({ queryKey: ['public-teams'] });
+      if (variables.slug) {
+        queryClient.invalidateQueries({ queryKey: ['public-transparency', variables.slug] });
+      }
+    },
+  });
+}
+
 export function useDeleteSplit() {
   const queryClient = useQueryClient();
 

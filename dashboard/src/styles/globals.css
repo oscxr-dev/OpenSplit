@@ -66,6 +66,22 @@
   filter: invert(35%) sepia(96%) saturate(2740%) hue-rotate(317deg) brightness(105%) contrast(103%);
 }
 
+.opensplit-wordmark,
+.opensplit-logo-icon {
+  display: block;
+  max-width: 100%;
+  object-fit: contain;
+  overflow: visible;
+}
+
+.opensplit-wordmark {
+  object-position: left center;
+}
+
+.os-modal .opensplit-wordmark {
+  object-position: center;
+}
+
 .opensplit-app .text-bitcoin,
 .umbrel-app .text-bitcoin {
   color: #ff2d78;
@@ -284,6 +300,115 @@ html[data-theme='light'] .opensplit-app nav a:hover {
   background-color: rgba(255, 45, 120, 0.055);
 }
 
+html[data-theme='light'] .opensplit-app .os-top-nav a:hover {
+  background-color: transparent;
+}
+
+html[data-theme='light'] .opensplit-app .os-top-nav a[aria-current='page'],
+html[data-theme='light'] .opensplit-app .os-top-nav a[aria-current='page']:hover,
+html[data-theme='light'] .opensplit-app .os-top-nav a[aria-current='page']:focus-visible {
+  background-color: #ff2d78;
+  color: #ffffff;
+}
+
+html[data-theme='light'] .opensplit-app .os-mobile-nav {
+  background-color: rgba(255, 255, 255, 0.88);
+  border-color: rgba(17, 19, 31, 0.1);
+  box-shadow: 0 -18px 48px rgba(17, 19, 31, 0.1);
+}
+
+html[data-theme='light'] .opensplit-app .os-mobile-nav > div {
+  background-color: rgba(255, 255, 255, 0.96);
+  border-color: rgba(17, 19, 31, 0.12);
+}
+
+html[data-theme='light'] .opensplit-app .os-mobile-nav a {
+  color: #667085;
+}
+
+html[data-theme='light'] .opensplit-app .os-mobile-nav a:hover {
+  background-color: rgba(255, 45, 120, 0.06);
+  color: #11131f;
+}
+
+html[data-theme='light'] .opensplit-app .os-mobile-nav a[aria-current='page'],
+html[data-theme='light'] .opensplit-app .os-mobile-nav a[aria-current='page']:hover,
+html[data-theme='light'] .opensplit-app .os-mobile-nav a[aria-current='page']:focus-visible {
+  background-color: #ff2d78;
+  color: #ffffff;
+}
+
+/* Settings → Public proof. Keep this section light, clean, and readable in
+   light mode instead of inheriting the dark proof-canvas palette. */
+html[data-theme='light'] .opensplit-app .public-rules-panel {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(253, 244, 248, 0.72));
+  border-color: rgba(255, 45, 120, 0.16);
+  box-shadow: 0 18px 46px rgba(17, 19, 31, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.92);
+}
+
+html[data-theme='light'] .opensplit-app .public-rules-icon {
+  background-color: #fff0f6;
+  color: #d91f68;
+}
+
+html[data-theme='light'] .opensplit-app .public-rules-filter {
+  background-color: #ffffff;
+  border-color: rgba(17, 19, 31, 0.1);
+  box-shadow: inset 0 1px 0 rgba(17, 19, 31, 0.04);
+}
+
+html[data-theme='light'] .opensplit-app .public-rules-filter button:not([class*='bg-[#FF2D78]']) {
+  color: #667085;
+}
+
+html[data-theme='light'] .opensplit-app .public-rules-filter button:not([class*='bg-[#FF2D78]']):hover {
+  background-color: rgba(255, 45, 120, 0.055);
+  color: #11131f;
+}
+
+html[data-theme='light'] .opensplit-app .public-rules-filter button[class*='bg-[#FF2D78]'] {
+  color: #ffffff;
+}
+
+html[data-theme='light'] .opensplit-app .public-rules-list {
+  background-color: #ffffff;
+  border-color: rgba(17, 19, 31, 0.1);
+}
+
+html[data-theme='light'] .opensplit-app .public-rule-row {
+  background-color: #ffffff;
+  border-color: rgba(17, 19, 31, 0.08);
+}
+
+html[data-theme='light'] .opensplit-app .public-rule-row:hover {
+  background-color: #fff7fb;
+}
+
+html[data-theme='light'] .opensplit-app .public-rules-paused {
+  background-color: #fff8ed;
+  border-color: rgba(249, 115, 22, 0.22);
+  color: #9a4a00;
+}
+
+html[data-theme='light'] .opensplit-app .public-rule-toggle {
+  border-color: rgba(17, 19, 31, 0.12);
+  background-color: #f4f6f9;
+  box-shadow: inset 0 1px 1px rgba(17, 19, 31, 0.04);
+}
+
+html[data-theme='light'] .opensplit-app .public-rule-toggle[aria-pressed='true'] {
+  border-color: rgba(255, 45, 120, 0.35);
+  background-color: #ff2d78;
+}
+
+html[data-theme='light'] .opensplit-app .public-proof-master-toggle.public-toggle-on {
+  background-color: #ff8a1f;
+  border-color: rgba(255, 138, 31, 0.32);
+  color: #11131f;
+  box-shadow: 0 0 0 6px rgba(255, 138, 31, 0.1), 0 14px 30px rgba(249, 115, 22, 0.16);
+}
+
 html[data-theme='light'] .opensplit-app .proof-canvas,
 html[data-theme='light'] .opensplit-app .split-proof-receipt,
 html[data-theme='light'] .public-proof-page,
@@ -331,6 +456,237 @@ html[data-theme='light'] .opensplit-app .proof-canvas [class*='border-white/'],
 html[data-theme='light'] .opensplit-app .split-proof-receipt [class*='border-white/'],
 html[data-theme='light'] .public-proof-page [class*='border-white/'] {
   border-color: rgba(245, 245, 247, 0.1);
+}
+
+/* Modals (.os-modal) are an always-dark surface floating over the app. The app's
+   light-theme remaps assume a light page, so without these overrides a modal in
+   light mode renders white cards / dark (invisible) text on its dark surface.
+   Re-assert dark-surface-appropriate colors inside the modal, in light theme
+   only. Declared after the .opensplit-app light rules so it wins on source order. */
+html[data-theme='light'] .os-modal [class~='text-white'],
+html[data-theme='light'] .os-modal [class~='text-white/90'],
+html[data-theme='light'] .os-modal [class~='text-[#F5F5F7]'] {
+  color: #f5f5f7;
+}
+
+html[data-theme='light'] .os-modal [class~='text-white/70'],
+html[data-theme='light'] .os-modal [class~='text-white/60'],
+html[data-theme='light'] .os-modal [class~='text-white/55'],
+html[data-theme='light'] .os-modal [class~='text-white/50'] {
+  color: rgba(245, 245, 247, 0.62);
+}
+
+html[data-theme='light'] .os-modal [class~='text-white/45'],
+html[data-theme='light'] .os-modal [class~='text-white/40'],
+html[data-theme='light'] .os-modal [class~='text-white/35'],
+html[data-theme='light'] .os-modal [class~='text-white/30'],
+html[data-theme='light'] .os-modal [class~='text-white/25'] {
+  color: rgba(245, 245, 247, 0.42);
+}
+
+html[data-theme='light'] .os-modal [class*='bg-white/'] {
+  background-color: rgba(245, 245, 247, 0.05);
+}
+
+html[data-theme='light'] .os-modal [class*='border-white/'] {
+  border-color: rgba(245, 245, 247, 0.14);
+}
+
+html[data-theme='light'] .os-modal input {
+  background-color: rgba(0, 0, 0, 0.3);
+  border-color: rgba(245, 245, 247, 0.22);
+  color: #f5f5f7;
+}
+
+html[data-theme='light'] .os-modal input::placeholder {
+  color: rgba(245, 245, 247, 0.4);
+}
+
+/* ── Opt-in LIGHT modals in light theme (.os-modal.os-modal-light) ───────────
+   Dialogs that pass `adaptive` get the .os-modal-light class and flip to a clean
+   light surface in light mode (e.g. the Create/Edit Split Rule modal and the
+   delete-confirmation modal). Other modals (e.g. Split Proof) keep their dark
+   .os-modal styling. The extra class raises specificity above the generic
+   .os-modal light rules above, so these win. Dark mode is completely untouched. */
+html[data-theme='light'] .os-modal.os-modal-light {
+  background-color: #ffffff;
+  border-color: rgba(17, 19, 31, 0.12);
+  color: #11131f;
+  box-shadow: 0 24px 80px rgba(17, 19, 31, 0.2);
+}
+
+html[data-theme='light'] .os-modal.os-modal-light::backdrop {
+  background-color: rgba(17, 19, 31, 0.32);
+  backdrop-filter: blur(3px);
+}
+
+/* Text → dark + readable */
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-white'],
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-white/90'],
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-[#F5F5F7]'] {
+  color: #11131f;
+}
+
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-white/70'],
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-white/60'],
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-white/55'],
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-[#94A3B8]'] {
+  color: #4a5160;
+}
+
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-white/45'],
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-white/40'],
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-white/35'],
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-white/30'] {
+  color: #6b7280;
+}
+
+/* Surfaces → light cards + visible borders */
+html[data-theme='light'] .os-modal.os-modal-light [class*='bg-white/'] {
+  background-color: rgba(17, 19, 31, 0.04);
+}
+
+html[data-theme='light'] .os-modal.os-modal-light [class*='border-white/'] {
+  border-color: rgba(17, 19, 31, 0.12);
+}
+
+/* Inputs → white bg, clear border, dark text, pink focus */
+html[data-theme='light'] .os-modal.os-modal-light input {
+  background-color: #ffffff;
+  border-color: rgba(17, 19, 31, 0.2);
+  color: #11131f;
+}
+
+html[data-theme='light'] .os-modal.os-modal-light input::placeholder {
+  color: rgba(17, 19, 31, 0.4);
+}
+
+html[data-theme='light'] .os-modal.os-modal-light input:focus {
+  border-color: rgba(255, 45, 120, 0.6);
+}
+
+/* Success / error text stays readable on light */
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-emerald-300'] {
+  color: #047857;
+}
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-red-300'],
+html[data-theme='light'] .os-modal.os-modal-light [class~='text-red-400'] {
+  color: #b91c1c;
+}
+
+/* Primary Save button → pink (a white default button would vanish on white) */
+html[data-theme='light'] .os-modal.os-modal-light button[type='submit'] {
+  background-color: #ff2d78;
+  border-color: transparent;
+  color: #ffffff;
+}
+
+html[data-theme='light'] .os-modal.os-modal-light button[type='submit']:hover:not(:disabled) {
+  background-color: #e9216a;
+}
+
+/* Disabled Save → muted but clearly visible */
+html[data-theme='light'] .os-modal.os-modal-light button[type='submit']:disabled {
+  background-color: rgba(17, 19, 31, 0.08) !important;
+  border-color: rgba(17, 19, 31, 0.12) !important;
+  color: rgba(17, 19, 31, 0.4) !important;
+}
+
+/* Destructive confirm button → stays solid red with white text (the generic
+   text-white → dark remap above would otherwise dim its label on light). */
+html[data-theme='light'] .os-modal.os-modal-light .os-danger-btn {
+  background-color: #e11d48;
+  border-color: transparent;
+  color: #ffffff;
+}
+html[data-theme='light'] .os-modal.os-modal-light .os-danger-btn:hover {
+  background-color: #be123c;
+}
+
+.os-modal .os-confirm-primary {
+  background-color: #ff2d78;
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 12px 30px rgba(255, 45, 120, 0.22);
+}
+
+.os-modal .os-confirm-primary:hover:not(:disabled) {
+  background-color: #e9216a;
+  color: #ffffff;
+}
+
+html[data-theme='light'] .os-modal.os-modal-light .os-confirm-primary {
+  background-color: #ff2d78;
+  border-color: transparent;
+  color: #ffffff;
+}
+
+html[data-theme='light'] .os-modal.os-modal-light .os-confirm-primary:hover {
+  background-color: #e9216a;
+  color: #ffffff;
+}
+
+html[data-theme='light'] .os-modal.os-modal-light .public-proof-confirm-summary {
+  background: linear-gradient(135deg, #ffffff 0%, #fff7fb 100%);
+  border-color: rgba(255, 45, 120, 0.14);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 12px 30px rgba(17, 19, 31, 0.05);
+}
+
+.os-modal .os-confirm-orange,
+html[data-theme='light'] .os-modal.os-modal-light .os-confirm-orange {
+  background-color: #f97316;
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.12), 0 14px 32px rgba(249, 115, 22, 0.22);
+}
+
+.os-confetti-burst {
+  position: relative;
+  width: 120px;
+  height: 76px;
+}
+
+.os-confetti-burst span {
+  position: absolute;
+  left: 50%;
+  top: 52%;
+  width: 7px;
+  height: 12px;
+  border-radius: 999px;
+  background: #f97316;
+  opacity: 0;
+  transform: translate(-50%, -50%) rotate(var(--r));
+  animation: os-confetti-pop 720ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.os-confetti-burst span:nth-child(3n + 1) {
+  background: #ff2d78;
+}
+
+.os-confetti-burst span:nth-child(3n + 2) {
+  background: #facc15;
+}
+
+@keyframes os-confetti-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -50%) rotate(var(--r)) scale(0.6);
+  }
+  18% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) rotate(var(--r)) scale(0.9);
+  }
+}
+
+/* Active-rule tabs above the graph: in light mode the inactive tab labels sit on
+   the light page background, where the default pale gray is too low-contrast.
+   Darken inactive tab text in light mode only; the selected tab (dark bg, light
+   text) and dark mode are untouched. */
+html[data-theme='light'] .os-rule-tabs [role='tab'][aria-selected='false'] {
+  color: #475467;
 }
 
 @keyframes pulse-dot {

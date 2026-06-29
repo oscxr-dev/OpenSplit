@@ -48,11 +48,16 @@ async def create_invoice(
     tenant: Tenant = Depends(get_current_tenant),
     session: AsyncSession = Depends(get_session),
 ) -> InvoiceResponse:
-    # Find active split rule
+    # Multiple rules can be active (each is a board tab). For invoice creation we
+    # pick a single deterministic default: the newest active rule (highest
+    # version, then most recently created). With one active rule this is simply
+    # that rule, preserving the original single-active behaviour.
     result = await session.execute(
-        select(SplitRule).where(SplitRule.tenant_id == tenant.id, SplitRule.active == True)
+        select(SplitRule)
+        .where(SplitRule.tenant_id == tenant.id, SplitRule.active == True)
+        .order_by(SplitRule.version.desc(), SplitRule.created_at.desc())
     )
-    active_rule = result.scalar_one_or_none()
+    active_rule = result.scalars().first()
 
     # Call LNBits to create the actual invoice
     client = LNBitsClient(tenant.lnbits_admin_key, tenant.lnbits_url)

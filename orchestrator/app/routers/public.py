@@ -20,14 +20,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_session
-from app.models import Payment, SplitRule, Tenant
+from app.models import Payment, PaymentSplit, SplitRule, Tenant
 from app.schemas import (
     PublicRecentPayment,
+    PublicSplitRule,
     PublicSplitMember,
+    PublicTeamsResponse,
+    PublicTeamSummary,
     PublicTransparencyResponse,
 )
 
 router = APIRouter(prefix="/public", tags=["public"])
+
+# Separate prefix so the discovery list doesn't collide with /public/{slug}.
+public_teams_router = APIRouter(prefix="/public-teams", tags=["public"])
 
 RECENT_PAYMENTS_LIMIT = 10
 
@@ -50,6 +56,16 @@ class PublicPaymentRow:
     amount_sats: int
 
 
+@dataclass
+class PublicRuleRow:
+    """A public split rule with only public-safe rule metadata."""
+
+    name: str
+    version: int
+    completed_split_count: int
+    targets: list[PublicTargetRow]
+
+
 def build_public_view(
     *,
     name: str,
@@ -58,6 +74,7 @@ def build_public_view(
     targets: list[PublicTargetRow],
     payments: list[PublicPaymentRow],
     total_paid_sats: int,
+    public_rules: list[PublicRuleRow] | None = None,
 ) -> PublicTransparencyResponse:
     """Assemble the public response, applying the show_amounts privacy gate.
 
@@ -71,6 +88,22 @@ def build_public_view(
             percentage=t.percentage,
         )
         for t in targets
+    ]
+    rules = [
+        PublicSplitRule(
+            name=rule.name,
+            version=rule.version,
+            completed_split_count=rule.completed_split_count,
+            distribution=[
+                PublicSplitMember(
+                    label=t.label,
+                    nostr_pubkey=t.nostr_pubkey,
+                    percentage=t.percentage,
+                )
+                for t in rule.targets
+            ],
+        )
+        for rule in (public_rules or [])
     ]
 
     recent_payments = [
@@ -86,6 +119,7 @@ def build_public_view(
         name=name,
         slug=slug,
         show_amounts=show_amounts,
+        public_rules=rules,
         distribution=distribution,
         recent_payments=recent_payments,
         total_sats=(total_paid_sats if show_amounts else None),
@@ -110,23 +144,55 @@ async def public_transparency(
     if tenant is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
 
-    active_rule = (
-        await session.execute(
+    # Public visibility is independent from active payment routing. Only rules
+    # explicitly marked public are exposed; active rules are never auto-published.
+    public_rules = list(
+        (
+            await session.execute(
             select(SplitRule)
-            .where(SplitRule.tenant_id == tenant.id, SplitRule.active == True)  # noqa: E712
+            .where(SplitRule.tenant_id == tenant.id, SplitRule.public_enabled == True)  # noqa: E712
+            .order_by(SplitRule.version.desc(), SplitRule.created_at.desc())
             .options(selectinload(SplitRule.targets))
-        )
-    ).scalar_one_or_none()
+            )
+        ).scalars().all()
+    )
 
-    targets = [
-        PublicTargetRow(
-            label=t.label,
-            nostr_pubkey=t.nostr_pubkey,
-            percentage=float(t.percentage) if t.percentage is not None else 0.0,
+    completed_counts = {}
+    if public_rules:
+        completed_counts = dict(
+            (
+                await session.execute(
+                    select(Payment.split_rule_id, func.count())
+                    .select_from(PaymentSplit)
+                    .join(Payment, Payment.id == PaymentSplit.payment_id)
+                    .where(
+                        Payment.tenant_id == tenant.id,
+                        Payment.split_rule_id.in_([rule.id for rule in public_rules]),
+                        PaymentSplit.status == "completed",
+                    )
+                    .group_by(Payment.split_rule_id)
+                )
+            ).all()
         )
-        for t in (active_rule.targets if active_rule else [])
-        if float(t.percentage or 0) > 0
+
+    public_rule_rows = [
+        PublicRuleRow(
+            name=rule.name,
+            version=rule.version,
+            completed_split_count=int(completed_counts.get(rule.id, 0)),
+            targets=[
+                PublicTargetRow(
+                    label=t.label,
+                    nostr_pubkey=t.nostr_pubkey,
+                    percentage=float(t.percentage) if t.percentage is not None else 0.0,
+                )
+                for t in rule.targets
+                if float(t.percentage or 0) > 0
+            ],
+        )
+        for rule in public_rules
     ]
+    targets = [target for rule in public_rule_rows for target in rule.targets]
 
     paid_rows = (
         await session.execute(
@@ -154,6 +220,81 @@ async def public_transparency(
         slug=slug,
         show_amounts=tenant.public_show_amounts,
         targets=targets,
+        public_rules=public_rule_rows,
         payments=payments,
         total_paid_sats=int(total_paid_sats or 0),
     )
+
+
+@public_teams_router.get("", response_model=PublicTeamsResponse)
+async def list_public_teams(
+    session: AsyncSession = Depends(get_session),
+) -> PublicTeamsResponse:
+    """Discovery list of opt-in public teams.
+
+    Privacy: activity METADATA only. This endpoint MUST NEVER expose money volume,
+    sats, fiat, balances, ln_address, payout destinations, emails, or any private
+    config. Read-only; never touches the split engine / payout / webhook logic.
+    """
+    tenants = (
+        await session.execute(
+            select(Tenant).where(
+                Tenant.public_transparency_enabled == True,  # noqa: E712
+                Tenant.active == True,  # noqa: E712
+                Tenant.public_slug.is_not(None),
+            )
+        )
+    ).scalars().all()
+    if not tenants:
+        return PublicTeamsResponse(teams=[])
+
+    ids = [t.id for t in tenants]
+
+    rule_counts = dict(
+        (
+            await session.execute(
+                select(SplitRule.tenant_id, func.count())
+                .where(SplitRule.tenant_id.in_(ids), SplitRule.public_enabled == True)  # noqa: E712
+                .group_by(SplitRule.tenant_id)
+            )
+        ).all()
+    )
+
+    split_counts = dict(
+        (
+            await session.execute(
+                select(Payment.tenant_id, func.count())
+                .select_from(PaymentSplit)
+                .join(Payment, Payment.id == PaymentSplit.payment_id)
+                .where(Payment.tenant_id.in_(ids), PaymentSplit.status == "completed")
+                .group_by(Payment.tenant_id)
+            )
+        ).all()
+    )
+
+    last_activity = dict(
+        (
+            await session.execute(
+                select(Payment.tenant_id, func.max(Payment.paid_at))
+                .where(Payment.tenant_id.in_(ids), Payment.status == "paid")
+                .group_by(Payment.tenant_id)
+            )
+        ).all()
+    )
+
+    teams = [
+        PublicTeamSummary(
+            name=t.brand_display_name or t.name,
+            slug=t.public_slug or "",
+            active_rule_count=int(rule_counts.get(t.id, 0)),
+            completed_splits=int(split_counts.get(t.id, 0)),
+            last_activity=last_activity.get(t.id),
+            created_at=t.created_at,
+            country=t.public_country,
+            city=t.public_city,
+        )
+        for t in tenants
+    ]
+    # Default ordering: most completed splits first (privacy-safe; no money used).
+    teams.sort(key=lambda team: team.completed_splits, reverse=True)
+    return PublicTeamsResponse(teams=teams)

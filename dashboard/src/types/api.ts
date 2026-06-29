@@ -18,8 +18,23 @@ export interface TenantResponse {
   brand_logo_url: string | null;
   public_slug?: string | null;
   public_show_amounts?: boolean | null;
+  public_transparency_enabled?: boolean | null;
+  public_country?: string | null;
+  public_city?: string | null;
   active: boolean;
   created_at: string;
+}
+
+/** Privacy-safe public team summary for the Public Teams discovery page. */
+export interface PublicTeamSummary {
+  name: string;
+  slug: string;
+  active_rule_count: number;
+  completed_splits: number;
+  last_activity: string | null;
+  created_at: string;
+  country: string | null;
+  city: string | null;
 }
 
 export interface TenantHealth {
@@ -44,6 +59,7 @@ export interface SplitRule {
   id: string;
   name: string;
   active: boolean;
+  public_enabled: boolean;
   version: number;
   parent_rule_id: string | null;
   targets: SplitTarget[];
@@ -158,6 +174,13 @@ export interface PublicSplitMember {
   percentage: number;
 }
 
+export interface PublicSplitRule {
+  name: string;
+  version: number;
+  completed_split_count: number;
+  distribution: PublicSplitMember[];
+}
+
 export interface PublicRecentPayment {
   status: string;
   paid_at: string | null;
@@ -168,6 +191,7 @@ export interface PublicTransparency {
   name: string;
   slug: string;
   show_amounts: boolean;
+  public_rules: PublicSplitRule[];
   distribution: PublicSplitMember[];
   recent_payments: PublicRecentPayment[];
   total_sats: number | null;

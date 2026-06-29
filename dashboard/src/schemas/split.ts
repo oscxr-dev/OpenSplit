@@ -47,10 +47,12 @@ export const splitRuleSchema = z.object({
     .min(1, 'At least one destination is required')
     .refine(
       (targets) => {
+        // Partial split rules are allowed: the total may be anywhere in (0, 100].
+        // Any unallocated remainder stays in the store. Over-allocation is blocked.
         const sum = targets.reduce((acc, t) => acc + t.percentage, 0);
-        return Math.abs(sum - 100) < 0.001;
+        return sum > 0 && sum <= 100.001;
       },
-      { message: 'Percentages must add up to 100%' }
+      { message: 'Percentages cannot exceed 100%' }
     ),
 });
 

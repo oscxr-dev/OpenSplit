@@ -92,13 +92,18 @@ async def list_members(
     tenant: Tenant = Depends(get_current_tenant),
     session: AsyncSession = Depends(get_session),
 ) -> list[MemberResponse]:
+    # Multiple rules can be active (board tabs); show members of the deterministic
+    # default rule (newest active: highest version, then most recent) — the same
+    # rule invoice/payout creation uses. With one active rule this is unchanged.
     active_rule_id = (
         await session.execute(
-            select(SplitRule.id).where(
+            select(SplitRule.id)
+            .where(
                 SplitRule.tenant_id == tenant.id, SplitRule.active == True  # noqa: E712
             )
+            .order_by(SplitRule.version.desc(), SplitRule.created_at.desc())
         )
-    ).scalar_one_or_none()
+    ).scalars().first()
 
     # All split_targets for this tenant so current targets can retain matching
     # historical payout stats without surfacing inactive/zero-percent partners.

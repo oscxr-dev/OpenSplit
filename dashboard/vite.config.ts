@@ -20,6 +20,9 @@ export default defineConfig({
       // any SW already registered in browsers unregisters itself and clears
       // its caches (fixes stale bundle serving the old duckdns base URL).
       selfDestroying: true,
+      devOptions: {
+        enabled: false,
+      },
       manifest: {
         name: 'OpenSplit',
         short_name: 'OpenSplit',
@@ -30,15 +33,9 @@ export default defineConfig({
         start_url: '/',
         icons: [
           {
-            src: '/icons/cubo-192.png',
-            sizes: '192x192',
-            type: 'image/png',
-            purpose: 'any',
-          },
-          {
-            src: '/icons/cubo-512.png',
-            sizes: '512x512',
-            type: 'image/png',
+            src: '/brand/OpenSplitlogo.svg',
+            sizes: 'any',
+            type: 'image/svg+xml',
             purpose: 'any maskable',
           },
         ],

@@ -1,15 +1,19 @@
 import { useCallback, useMemo, useState } from 'react';
 import axios from 'axios';
-import { Archive, GitBranch, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, PowerOff, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useActivateSplit, useCreateSplit, useDeleteSplit, useUpdateSplit } from '@/hooks/useSplits';
+import { useActivateSplit, useCreateSplit, useDeactivateSplit, useDeleteSplit, useUpdateSplit } from '@/hooks/useSplits';
 import { SplitBar } from '@/components/splits/SplitBar';
 import { SplitRuleForm } from '@/components/splits/SplitRuleForm';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Dialog } from '@/components/ui/Dialog';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Input } from '@/components/ui/Input';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/shared/ErrorState';
-import { formatDate } from '@/lib/utils';
+import { filterRules, type RuleLibraryFilter } from '@/lib/ruleLibrary';
+import { cn } from '@/lib/utils';
 import type { SplitRule, SplitRuleCreate } from '@/types/api';
 import type { SplitRuleFormData } from '@/schemas/split';
 
@@ -21,22 +25,11 @@ interface SplitRulesSectionProps {
   startOpen?: boolean;
 }
 
-const HIDDEN_RULES_KEY = 'opensplit-hidden-split-rules';
-
-function readHiddenRuleIds() {
-  if (typeof window === 'undefined') return [] as string[];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(HIDDEN_RULES_KEY) || '[]');
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeHiddenRuleIds(ruleIds: string[]) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(HIDDEN_RULES_KEY, JSON.stringify(ruleIds));
-}
+const LIBRARY_FILTERS: Array<{ value: RuleLibraryFilter; label: string }> = [
+  { value: 'all', label: 'All' },
+  { value: 'active', label: 'Active' },
+  { value: 'inactive', label: 'Inactive' },
+];
 
 function apiErrorMessage(error: unknown, fallback: string) {
   if (!axios.isAxiosError(error)) return fallback;
@@ -46,37 +39,55 @@ function apiErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 
+function previewTargets(rule: SplitRule) {
+  return rule.targets
+    .filter((target) => target.percentage > 0)
+    .map((target) => ({ label: target.label, percentage: target.percentage }));
+}
+
 export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOpen = false }: SplitRulesSectionProps) {
   const [showForm, setShowForm] = useState(startOpen);
   const [editingRule, setEditingRule] = useState<SplitRule | null>(null);
-  const [hiddenRuleIds, setHiddenRuleIds] = useState<string[]>(readHiddenRuleIds);
-  const [showHiddenRules, setShowHiddenRules] = useState(false);
+  // Bumped on every close so the next time the modal opens the form gets a brand
+  // new key → a guaranteed fresh React Hook Form instance (no leaked state).
+  const [formGeneration, setFormGeneration] = useState(0);
+  const [confirmDeleteRule, setConfirmDeleteRule] = useState<SplitRule | null>(null);
+  const [search, setSearch] = useState('');
+  const [libraryFilter, setLibraryFilter] = useState<RuleLibraryFilter>('all');
   const createSplit = useCreateSplit();
   const updateSplit = useUpdateSplit();
   const activateSplit = useActivateSplit();
+  const deactivateSplit = useDeactivateSplit();
   const deleteSplit = useDeleteSplit();
 
-  const activeRule = useMemo(() => splits?.find((rule) => rule.active), [splits]);
-  const inactiveRules = useMemo(() => splits?.filter((rule) => !rule.active) ?? [], [splits]);
-  const activeTargets = useMemo(
-    () => activeRule?.targets.filter((target) => target.percentage > 0) ?? [],
-    [activeRule]
+  const allRules = useMemo(() => splits ?? [], [splits]);
+
+  // Active-rule count for the library subtitle. The active-rule tabs + Current
+  // Rule visualization now live on the TeamMap graph (see MembersPage).
+  const activeRules = useMemo(() => allRules.filter((rule) => rule.active), [allRules]);
+
+  const libraryRules = useMemo(
+    () => filterRules(allRules, search, libraryFilter),
+    [allRules, search, libraryFilter]
   );
-  const activeTotal = activeTargets.reduce((sum, target) => sum + target.percentage, 0);
-  const visibleInactiveRules = inactiveRules.filter((rule) => showHiddenRules || !hiddenRuleIds.includes(rule.id));
-  const hiddenCount = inactiveRules.filter((rule) => hiddenRuleIds.includes(rule.id)).length;
+
+  const closeForm = useCallback(() => {
+    setShowForm(false);
+    setEditingRule(null);
+    setFormGeneration((generation) => generation + 1);
+  }, []);
 
   const handleCreate = useCallback(
     async (data: SplitRuleFormData) => {
       try {
         await createSplit.mutateAsync(data as SplitRuleCreate);
         toast.success('Split rule created');
-        setShowForm(false);
+        closeForm();
       } catch {
         toast.error('Could not create split rule');
       }
     },
-    [createSplit]
+    [createSplit, closeForm]
   );
 
   const handleUpdate = useCallback(
@@ -85,12 +96,12 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
       try {
         await updateSplit.mutateAsync({ id: editingRule.id, data });
         toast.success('Split rule updated');
-        setEditingRule(null);
+        closeForm();
       } catch {
         toast.error('Could not update split rule');
       }
     },
-    [editingRule, updateSplit]
+    [editingRule, updateSplit, closeForm]
   );
 
   const handleActivate = useCallback(
@@ -99,49 +110,48 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
         await activateSplit.mutateAsync(rule.id);
         toast.success('Split rule activated');
       } catch (error) {
-        const message = apiErrorMessage(error, 'Could not activate split rule');
-        toast.error(message);
-        setShowForm(false);
-        setEditingRule(rule);
+        toast.error(apiErrorMessage(error, 'Could not activate split rule'));
       }
     },
     [activateSplit]
   );
 
-  const handleDelete = useCallback(
+  const handleDeactivate = useCallback(
     async (rule: SplitRule) => {
-      const confirmed = window.confirm(`Delete "${rule.name}"? This only removes a draft rule with no payment history.`);
-      if (!confirmed) return;
-
       try {
-        await deleteSplit.mutateAsync(rule.id);
-        toast.success('Split rule deleted');
-      } catch {
-        toast.error('Only inactive rules without payment history can be deleted');
+        await deactivateSplit.mutateAsync(rule.id);
+        toast.success('Split rule deactivated');
+      } catch (error) {
+        toast.error(apiErrorMessage(error, 'Could not deactivate split rule'));
       }
     },
-    [deleteSplit]
+    [deactivateSplit]
   );
 
-  const handleHide = useCallback(
+  // Clicking Delete in the edit modal opens a custom confirmation modal instead
+  // of window.confirm. Active rules are blocked outright (no confirm needed).
+  const handleDelete = useCallback(
     (rule: SplitRule) => {
-      const nextIds = Array.from(new Set([...hiddenRuleIds, rule.id]));
-      setHiddenRuleIds(nextIds);
-      writeHiddenRuleIds(nextIds);
-      toast.success('Rule hidden from demo. Payment proof history stays intact.');
+      if (rule.active) {
+        toast.error('Deactivate this rule before deleting it.');
+        return;
+      }
+      setConfirmDeleteRule(rule);
     },
-    [hiddenRuleIds]
+    []
   );
 
-  const handleRestore = useCallback(
-    (rule: SplitRule) => {
-      const nextIds = hiddenRuleIds.filter((id) => id !== rule.id);
-      setHiddenRuleIds(nextIds);
-      writeHiddenRuleIds(nextIds);
-      toast.success('Rule restored to saved rules');
-    },
-    [hiddenRuleIds]
-  );
+  const confirmDelete = useCallback(async () => {
+    if (!confirmDeleteRule) return;
+    try {
+      await deleteSplit.mutateAsync(confirmDeleteRule.id);
+      toast.success('Split rule deleted');
+      setConfirmDeleteRule(null);
+      closeForm();
+    } catch {
+      toast.error('Only inactive rules without payment history can be deleted');
+    }
+  }, [confirmDeleteRule, deleteSplit, closeForm]);
 
   if (isLoading) {
     return (
@@ -158,162 +168,201 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
     return <ErrorState message="Could not load split rules" onRetry={onRetry} />;
   }
 
-  if (showForm || editingRule) {
-    const rule = editingRule;
-
-    return (
-      <Card className="bg-white/[0.055] shadow-none">
-        <CardContent className="p-6">
-          <div className="mb-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#94A3B8]">
-              {rule ? 'Edit split' : 'New split'}
-            </p>
-            <h2 className="mt-2 text-xl font-semibold text-[#F5F5F7]">
-              {rule ? rule.name : 'Create split rule'}
-            </h2>
-          </div>
-          <SplitRuleForm
-            defaultValues={rule
-              ? {
-                  name: rule.name,
-                  targets: rule.targets.map((target) => ({
-                    label: target.label,
-                    lnbits_wallet_id: target.lnbits_wallet_id || '',
-                    ln_address: target.ln_address || '',
-                    has_lnd_receiver: target.has_lnd_receiver ?? false,
-                    percentage: target.percentage,
-                    order: target.order,
-                  })),
-                }
-              : undefined}
-            onSubmit={rule ? handleUpdate : handleCreate}
-            onCancel={() => {
-              setShowForm(false);
-              setEditingRule(null);
-            }}
-          />
-        </CardContent>
-      </Card>
-    );
-  }
+  const formOpen = showForm || editingRule !== null;
 
   return (
     <Card className="overflow-hidden bg-white/[0.055] shadow-none">
       <CardContent className="p-0">
-        <section className="border-b border-white/[0.08] p-5 sm:p-6">
-          <div className="grid gap-4 xl:grid-cols-[minmax(220px,0.42fr)_1fr_auto] xl:items-center">
+        {/* Rule Library (the active-rule tabs + Current Rule board now live on
+            top of the TeamMap graph in MembersPage). */}
+        <section className="p-5 sm:p-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#94A3B8]">Current rule</p>
-                {activeRule && (
-                  <span className="rounded-full border border-[#FF2E93]/24 bg-[#FF2E93]/[0.07] px-2.5 py-1 text-[11px] font-medium text-[#FF2E93]">
-                    Active
-                  </span>
-                )}
-              </div>
-              <h2 className="mt-2 text-xl font-semibold text-[#F5F5F7]">{activeRule?.name ?? 'No active split'}</h2>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#94A3B8]">
-                <span className="font-mono">{activeRule ? `v${activeRule.version}` : 'v-'}</span>
-                <span>{activeTargets.length} targets</span>
-                <span className="font-mono">{activeRule ? `${activeTotal.toFixed(0)}% allocated` : '0% allocated'}</span>
-              </div>
+              <h2 className="font-semibold text-[#F5F5F7]">Rule Library</h2>
+              <p className="mt-1 text-sm text-[#94A3B8]">
+                {activeRules.length} active · {allRules.length - activeRules.length} inactive
+              </p>
             </div>
-
-            <div className="w-full">
-              {activeRule ? (
-                <SplitBar targets={activeTargets.map((target) => ({ label: target.label, percentage: target.percentage }))} />
-              ) : (
-                <div className="rounded-lg border border-white/[0.08] bg-white/[0.035] px-4 py-3 text-sm text-[#94A3B8]">
-                  Create one rule to route the next BTCPay payment.
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-start xl:justify-end">
-              <Button size="sm" onClick={() => setShowForm(true)} className="w-full sm:w-auto sm:min-w-28">
+            <div className="flex items-center gap-2">
+              <div className="relative w-full sm:w-64">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#94A3B8]" />
+                <Input
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search rules by name"
+                  className="pl-9"
+                  aria-label="Search rules by name"
+                />
+              </div>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setEditingRule(null);
+                  setShowForm(true);
+                }}
+                className="shrink-0"
+              >
                 <Plus className="h-4 w-4" />
                 New rule
               </Button>
             </div>
           </div>
-        </section>
 
-        <div className="flex flex-col gap-3 border-b border-white/[0.08] p-5 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <GitBranch className="h-5 w-5 text-[#94A3B8]" strokeWidth={1.8} />
-            <div>
-              <h2 className="font-semibold text-[#F5F5F7]">Saved rules</h2>
-              <p className="mt-1 text-sm text-[#94A3B8]">
-                {inactiveRules.length} inactive · only one rule can be active
-              </p>
-            </div>
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            {LIBRARY_FILTERS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setLibraryFilter(option.value)}
+                className={cn(
+                  'shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                  libraryFilter === option.value
+                    ? 'border border-[#FF2E93]/28 bg-[#FF2E93]/[0.10] text-[#F5F5F7]'
+                    : 'border border-white/[0.08] bg-white/[0.03] text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F5F5F7]'
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
-          {hiddenCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => setShowHiddenRules((value) => !value)} className="w-full sm:w-auto">
-              {showHiddenRules ? 'Hide archived' : `Show hidden (${hiddenCount})`}
-            </Button>
-          )}
-        </div>
 
-        <div className="divide-y divide-white/[0.08]">
-          {visibleInactiveRules.length === 0 ? (
-            <p className="p-5 text-sm text-[#94A3B8]">
-              {hiddenCount > 0 ? 'All inactive rules are hidden from this demo.' : 'No inactive rules saved.'}
-            </p>
-          ) : visibleInactiveRules.map((rule) => {
-            const isHidden = hiddenRuleIds.includes(rule.id);
-            return (
-              <div key={rule.id} className="grid gap-3 p-4 lg:grid-cols-[minmax(160px,0.34fr)_1fr_auto] lg:items-center">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold text-[#F5F5F7]">{rule.name}</p>
-                    <span className="rounded-full border border-white/[0.10] bg-white/[0.05] px-2.5 py-1 text-[11px] font-medium text-[#94A3B8]">
-                      {isHidden ? 'Hidden' : 'Inactive'}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-[#94A3B8]">Created {formatDate(rule.created_at)}</p>
-                </div>
-
-                <SplitBar
-                  targets={rule.targets
-                    .filter((target) => target.percentage > 0)
-                    .map((target) => ({ label: target.label, percentage: target.percentage }))}
-                />
-
-                <div className="flex flex-wrap items-center gap-2 lg:min-w-[260px] lg:justify-end">
-                  <Button variant="ghost" size="sm" onClick={() => setEditingRule(rule)} className="min-w-20">
-                    Edit
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => handleActivate(rule)} className="min-w-24">
-                    Activate
-                  </Button>
-                  {rule.can_delete ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(rule)}
-                      loading={deleteSplit.isPending}
-                      className="min-w-20 text-[#FF2E93] hover:text-[#FF6AB6]"
+          <div className="mt-4 overflow-hidden rounded-lg border border-white/[0.08]">
+            {libraryRules.length === 0 ? (
+              <p className="px-4 py-8 text-center text-sm text-[#94A3B8]">
+                {allRules.length === 0 ? 'No rules yet. Create one to get started.' : 'No rules match your search.'}
+              </p>
+            ) : (
+              <div className="divide-y divide-white/[0.08]">
+                {libraryRules.map((rule) => (
+                  <div
+                    key={rule.id}
+                    className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:gap-4 sm:px-4"
+                  >
+                    {/* Name + status */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowForm(false);
+                        setEditingRule(rule);
+                      }}
+                      className="group flex min-w-0 items-center gap-2 text-left sm:w-52 sm:shrink-0"
+                      title="Edit rule"
                     >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </Button>
-                  ) : isHidden ? (
-                    <Button variant="ghost" size="sm" onClick={() => handleRestore(rule)} className="min-w-20">
-                      Restore
-                    </Button>
-                  ) : (
-                    <Button variant="ghost" size="sm" onClick={() => handleHide(rule)} className="min-w-24">
-                      <Archive className="h-4 w-4" />
-                      Hide
-                    </Button>
-                  )}
-                </div>
+                      <span className="truncate font-medium text-[#F5F5F7] group-hover:text-white">{rule.name}</span>
+                      <span
+                        className={cn(
+                          'shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                          rule.active
+                            ? 'border-[#FF2E93]/24 bg-[#FF2E93]/[0.08] text-[#FF2E93]'
+                            : 'border-white/[0.10] bg-white/[0.04] text-[#94A3B8]'
+                        )}
+                      >
+                        {rule.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </button>
+
+                    {/* Compact split preview */}
+                    <div className="min-w-0 flex-1">
+                      <SplitBar variant="library" showLegend={false} targets={previewTargets(rule)} />
+                    </div>
+
+                    {/* Primary action */}
+                    <div className="flex shrink-0 items-center gap-1.5 sm:justify-end">
+                      {rule.active ? (
+                        <Button variant="ghost" size="sm" onClick={() => handleDeactivate(rule)} className="min-w-24">
+                          <PowerOff className="h-4 w-4" />
+                          Deactivate
+                        </Button>
+                      ) : (
+                        <Button variant="outline" size="sm" onClick={() => handleActivate(rule)} className="min-w-24">
+                          Activate
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setShowForm(false);
+                          setEditingRule(rule);
+                        }}
+                        className="px-2"
+                        aria-label={`Edit ${rule.name}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
               </div>
-            );
-          })}
-        </div>
+            )}
+          </div>
+        </section>
       </CardContent>
+
+      {/* Create / edit drawer */}
+      <Dialog
+        open={formOpen}
+        onClose={closeForm}
+        title={editingRule ? `Edit ${editingRule.name}` : 'Create split rule'}
+        className="max-w-2xl"
+        adaptive
+      >
+        {/* Render the form only while open, keyed per target, so RHF state never
+            leaks between opens: "New rule" always mounts a fresh, empty form and
+            editing a rule mounts with that rule's data. */}
+        {formOpen && (
+          <>
+            <SplitRuleForm
+              key={`${editingRule?.id ?? 'new'}-${formGeneration}`}
+              defaultValues={editingRule
+                ? {
+                    name: editingRule.name,
+                    targets: editingRule.targets.map((target) => ({
+                      label: target.label,
+                      lnbits_wallet_id: target.lnbits_wallet_id || '',
+                      ln_address: target.ln_address || '',
+                      has_lnd_receiver: target.has_lnd_receiver ?? false,
+                      percentage: target.percentage,
+                      order: target.order,
+                    })),
+                  }
+                : undefined}
+              onSubmit={editingRule ? handleUpdate : handleCreate}
+              onCancel={closeForm}
+            />
+            {editingRule && (
+              <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/[0.08] pt-4">
+                <p className="text-xs text-[#94A3B8]">
+                  {editingRule.active ? 'Deactivate before deleting.' : 'Only draft rules with no payment history can be deleted.'}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDelete(editingRule)}
+                  loading={deleteSplit.isPending}
+                  className="text-[#FF2E93] hover:text-[#FF6AB6]"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              </div>
+            )}
+          </>
+        )}
+      </Dialog>
+
+      {/* Delete confirmation — replaces window.confirm; stacks above the edit modal. */}
+      <ConfirmDialog
+        open={confirmDeleteRule !== null}
+        title="Delete rule?"
+        description="This only removes a draft rule with no payment history."
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        destructive
+        loading={deleteSplit.isPending}
+        onConfirm={confirmDelete}
+        onClose={() => setConfirmDeleteRule(null)}
+      />
     </Card>
   );
 }

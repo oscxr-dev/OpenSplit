@@ -68,6 +68,7 @@ app.include_router(dashboard.router, prefix="/api/v1")
 app.include_router(members.router, prefix="/api/v1")
 app.include_router(proof.router, prefix="/api/v1")
 app.include_router(public.router, prefix="/api/v1")
+app.include_router(public.public_teams_router, prefix="/api/v1")
 
 
 # ── Health ───────────────────────────────────────────────────────────

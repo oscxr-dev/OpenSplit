@@ -5,7 +5,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import axios from 'axios';
 import { LockKeyhole } from 'lucide-react';
 import { toast } from 'sonner';
-import { BrandMark } from '@/components/brand/BrandMark';
 import { loginSchema, type LoginFormData } from '@/schemas/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -52,18 +51,22 @@ export function LoginPage() {
       <div className="relative z-10 w-full max-w-sm">
         <div className="rounded-[28px] border border-white/10 bg-[#17141f]/70 p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.09),0_35px_100px_rgba(0,0,0,0.48)] backdrop-blur-3xl sm:p-8">
           <div className="mb-8 flex flex-col items-center gap-3">
-            <BrandMark size="lg" className="bg-[#FF2D78]/12 shadow-[inset_0_1px_0_rgba(255,255,255,0.18),0_16px_34px_rgba(255,45,120,0.18)]" />
-            <h1 className="text-2xl font-semibold tracking-tight text-white/90">OpenSplit</h1>
+            <img
+              src="/brand/OpenSplit-navbar.svg"
+              alt="OpenSplit"
+              className="opensplit-wordmark h-20 w-full max-w-[320px] object-contain"
+            />
             <p className="text-sm text-white/40">Your node, your payments, your rules.</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <Input
-              label="Email"
+              aria-label="Email"
               type="email"
-              placeholder="admin@bitcrew.example"
+              placeholder="admin@opensplit.com"
               autoComplete="email"
               error={errors.email?.message}
+              className="border-transparent bg-transparent px-0 text-base font-medium shadow-none placeholder:text-white/55 hover:border-transparent hover:bg-transparent focus:border-transparent focus:bg-transparent focus:ring-0"
               {...register('email')}
             />
 

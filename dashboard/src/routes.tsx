@@ -9,6 +9,7 @@ import { PaymentsPage } from '@/pages/PaymentsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { MembersPage } from '@/pages/MembersPage';
 import { PublicTransparencyPage } from '@/pages/PublicTransparencyPage';
+import { PublicTeamsPage } from '@/pages/PublicTeamsPage';
 
 function RootLayout() {
   return (
@@ -23,6 +24,7 @@ export const router = createBrowserRouter([
     element: <RootLayout />,
     children: [
       { path: '/login', element: <LoginPage /> },
+      { path: '/public', element: <PublicTeamsPage /> },
       { path: '/public/:slug', element: <PublicTransparencyPage /> },
       {
         path: '/',

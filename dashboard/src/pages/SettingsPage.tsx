@@ -1,12 +1,19 @@
-import { useState } from 'react';
-import { Check, LogOut, Moon, ServerCog, ShieldCheck, Sun } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Check, Globe2, Info, Link2, LogOut, MapPin, Moon, ServerCog, ShieldCheck, Store, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/hooks/useAuth';
+import { useSplits, useToggleSplitPublic } from '@/hooks/useSplits';
 import { useTheme } from '@/hooks/useTheme';
+import api from '@/lib/api';
 import { cn } from '@/lib/utils';
+import type { SplitRule, TenantResponse } from '@/types/api';
 
 const themeOptions = [
   {
@@ -32,26 +39,204 @@ function slugify(value: string) {
     .replace(/^-+|-+$/g, '');
 }
 
+function InfoTip({ children }: { children: string }) {
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        className="group inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#94A3B8]/35 text-[#94A3B8] transition hover:border-[#FF2D78]/45 hover:text-[#FF2D78] focus:outline-none focus:ring-2 focus:ring-[#FF2D78]/20"
+        aria-label={children}
+      >
+        <Info className="h-3.5 w-3.5" strokeWidth={2} />
+        <span className="pointer-events-none absolute left-1/2 top-7 z-20 w-64 -translate-x-1/2 rounded-lg border border-white/[0.10] bg-[#11131F] px-3 py-2 text-left text-xs font-medium leading-5 text-[#F5F5F7] opacity-0 shadow-[0_18px_50px_rgba(0,0,0,0.22)] transition group-hover:opacity-100 group-focus:opacity-100">
+          {children}
+        </span>
+      </button>
+    </span>
+  );
+}
+
+function activeTargets(rule?: SplitRule | null) {
+  return (rule?.targets ?? []).filter((target) => target.percentage > 0);
+}
+
+function allocationTotal(rule?: SplitRule | null) {
+  return activeTargets(rule).reduce((sum, target) => sum + target.percentage, 0);
+}
+
 export function SettingsPage() {
   const { theme, setTheme } = useTheme();
-  const { logout, tenant } = useAuth();
+  const { logout, tenant, refreshTenant } = useAuth();
+  const { data: splitRules = [], isLoading: splitRulesLoading } = useSplits();
+  const toggleSplitPublic = useToggleSplitPublic();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [publicPageOn, setPublicPageOn] = useState(false);
+  const [confirmPublicProofOpen, setConfirmPublicProofOpen] = useState(false);
+  const [savingPublicProof, setSavingPublicProof] = useState(false);
+  const [showPublicRulesOnly, setShowPublicRulesOnly] = useState(false);
   const workspaceName = tenant?.tenant.brand_display_name || tenant?.tenant.name || 'OpenSplit';
   const publicSlug = tenant?.tenant.public_slug || slugify(tenant?.tenant.name || workspaceName);
   const connected = tenant?.lnbits_status === 'ok';
+  const publicPageOn = Boolean(tenant?.tenant.public_transparency_enabled);
+  const publicRules = splitRules.filter((rule) => rule.public_enabled);
+  const displayedPublicRules = showPublicRulesOnly ? publicRules : splitRules;
+
+  async function refreshSettingsDependents(previousSlug?: string | null, nextSlug?: string | null) {
+    await refreshTenant();
+    await queryClient.invalidateQueries({ queryKey: ['tenant'] });
+    await queryClient.invalidateQueries({ queryKey: ['public-teams'] });
+    await queryClient.invalidateQueries({ queryKey: ['settings'] });
+    if (previousSlug) {
+      await queryClient.invalidateQueries({ queryKey: ['public-transparency', previousSlug] });
+      queryClient.removeQueries({ queryKey: ['public-transparency', previousSlug] });
+    }
+    if (nextSlug) {
+      await queryClient.invalidateQueries({ queryKey: ['public-transparency', nextSlug] });
+    }
+  }
+
+  async function patchTenantSettings(
+    payload: Partial<TenantResponse>,
+    options: { success: string; previousSlug?: string | null; nextSlug?: string | null }
+  ) {
+    const response = await api.patch<TenantResponse>('/tenants/me', payload);
+    await refreshSettingsDependents(options.previousSlug, options.nextSlug ?? response.data.public_slug);
+    toast.success(options.success);
+    return response.data;
+  }
+
+  // Editable store/team name (tenant.name). Saved via the existing PATCH
+  // /tenants/me, then refreshed so the new name propagates across the app.
+  const currentName = tenant?.tenant.name ?? '';
+  const [storeName, setStoreName] = useState(currentName);
+  const [savingName, setSavingName] = useState(false);
+  useEffect(() => {
+    setStoreName(currentName);
+  }, [currentName]);
+
+  const trimmedName = storeName.trim();
+  const nameDirty = trimmedName.length > 0 && trimmedName !== currentName;
+
+  async function saveStoreName() {
+    if (!nameDirty) return;
+    setSavingName(true);
+    try {
+      await patchTenantSettings(
+        { name: trimmedName },
+        { success: 'Store name updated', nextSlug: savedSlug }
+      );
+    } catch {
+      toast.error('Could not update store name');
+    } finally {
+      setSavingName(false);
+    }
+  }
+
+  // Public URL slug (tenant.public_slug) — separate from the store name. Once a
+  // slug is saved we keep it (don't re-derive from the name); only fall back to
+  // a name-derived slug while none has been saved yet.
+  const savedSlug = tenant?.tenant.public_slug ?? '';
+  const [slugInput, setSlugInput] = useState(savedSlug || slugify(currentName));
+  const [savingSlug, setSavingSlug] = useState(false);
+  useEffect(() => {
+    setSlugInput(savedSlug || slugify(currentName));
+  }, [savedSlug, currentName]);
+
+  const normalizedSlug = slugify(slugInput);
+  const slugDirty = normalizedSlug.length > 0 && normalizedSlug !== savedSlug;
+
+  async function savePublicSlug() {
+    if (!slugDirty) return;
+    setSavingSlug(true);
+    try {
+      await patchTenantSettings(
+        { public_slug: normalizedSlug },
+        {
+          success: 'Public URL updated',
+          previousSlug: savedSlug,
+          nextSlug: normalizedSlug,
+        }
+      );
+    } catch {
+      toast.error('Could not update public URL');
+    } finally {
+      setSavingSlug(false);
+    }
+  }
+
+  // Optional, coarse public location for the Public Teams map (country/city only;
+  // never a precise address). Blank clears it ("Unknown location").
+  const currentCountry = tenant?.tenant.public_country ?? '';
+  const currentCity = tenant?.tenant.public_city ?? '';
+  const [country, setCountry] = useState(currentCountry);
+  const [city, setCity] = useState(currentCity);
+  const [savingLocation, setSavingLocation] = useState(false);
+  useEffect(() => {
+    setCountry(currentCountry);
+    setCity(currentCity);
+  }, [currentCountry, currentCity]);
+
+  const locationDirty = country.trim() !== currentCountry || city.trim() !== currentCity;
+
+  async function saveLocation() {
+    if (!locationDirty) return;
+    setSavingLocation(true);
+    try {
+      await patchTenantSettings(
+        { public_country: country.trim(), public_city: city.trim() },
+        { success: 'Location updated', nextSlug: savedSlug }
+      );
+    } catch {
+      toast.error('Could not update location');
+    } finally {
+      setSavingLocation(false);
+    }
+  }
+
+  async function savePublicProof(nextValue: boolean) {
+    if (nextValue === publicPageOn) return;
+    setSavingPublicProof(true);
+    try {
+      await patchTenantSettings(
+        { public_transparency_enabled: nextValue },
+        {
+          success: nextValue ? 'Public proof enabled' : 'Public proof disabled',
+          nextSlug: savedSlug,
+        }
+      );
+    } catch {
+      toast.error('Could not update public proof');
+    } finally {
+      setSavingPublicProof(false);
+      setConfirmPublicProofOpen(false);
+    }
+  }
+
+  async function toggleRulePublic(rule: SplitRule) {
+    if (!publicPageOn) {
+      toast.error('Turn Public proof on before publishing rules');
+      return;
+    }
+
+    try {
+      await toggleSplitPublic.mutateAsync({
+        id: rule.id,
+        public_enabled: !rule.public_enabled,
+        slug: publicSlug,
+      });
+      toast.success(!rule.public_enabled ? 'Rule is public' : 'Rule hidden from public page');
+    } catch {
+      toast.error('Could not update public rule');
+    }
+  }
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-4xl font-semibold tracking-tight text-[#F5F5F7] sm:text-5xl">Workspace</h1>
-      </div>
-
       <Card>
         <CardContent className="p-0">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-col items-center gap-6 text-center lg:flex-row lg:justify-between lg:text-left">
             <div className="p-6 sm:p-8">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center gap-3 lg:justify-start">
                 <ServerCog className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
                 <h2 className="text-xl font-semibold text-[#F5F5F7]">BTCPay</h2>
               </div>
@@ -64,40 +249,288 @@ export function SettingsPage() {
           </div>
 
           <div className="border-t border-white/[0.07] p-6 sm:p-8">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <div className="flex items-center gap-3">
-                  <ShieldCheck className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
-                  <h2 className="font-semibold text-[#F5F5F7]">Public proof page</h2>
+            <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
+              <div className="w-full sm:max-w-sm">
+                <div className="flex items-center justify-center gap-3 sm:justify-start">
+                  <Store className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
+                  <h2 className="font-semibold text-[#F5F5F7]">Store name</h2>
+                  <InfoTip>
+                    The display name shown inside OpenSplit and on the public proof page. It does not change historical Split Proof records.
+                  </InfoTip>
                 </div>
-                <p className="mt-3 text-sm leading-6 text-[#94A3B8]">
-                  Shows the active split, recent public payments, and no private wallet data.
-                </p>
-                <p className="mt-2 font-mono text-xs text-[#94A3B8]">/public/{publicSlug}</p>
+                <Input
+                  className="mt-4"
+                  value={storeName}
+                  onChange={(event) => setStoreName(event.target.value)}
+                  placeholder="Your team"
+                  aria-label="Store or team name"
+                  maxLength={255}
+                />
               </div>
-              <button
-                type="button"
-                onClick={() => setPublicPageOn((value) => !value)}
-                className={cn(
-                  'inline-flex min-h-10 min-w-24 items-center justify-center rounded-full border px-5 text-sm font-semibold transition',
-                  publicPageOn
-                    ? 'public-toggle-on border-orange-300/50 bg-orange-500 text-white shadow-[0_0_0_4px_rgba(249,115,22,0.10)]'
-                    : 'border-white/[0.16] bg-white text-[#11131F] hover:bg-white/90'
-                )}
-                aria-pressed={publicPageOn}
-              >
-                {publicPageOn ? 'On' : 'Off'}
-              </button>
+              <Button size="sm" onClick={saveStoreName} loading={savingName} disabled={!nameDirty} className="shrink-0">
+                Save name
+              </Button>
             </div>
           </div>
 
           <div className="border-t border-white/[0.07] p-6 sm:p-8">
-            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="font-semibold text-[#F5F5F7]">Appearance</h2>
-                <p className="mt-2 text-sm leading-6 text-[#94A3B8]">
-                  Switch between dark and light without making payment records harder to read.
+            <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
+              <div className="w-full sm:max-w-sm">
+                <div className="flex items-center justify-center gap-3 sm:justify-start">
+                  <Link2 className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
+                  <h2 className="font-semibold text-[#F5F5F7]">Public URL</h2>
+                  <InfoTip>
+                    The stable public link for this team. Keep it short and readable so visitors can verify payment proofs later.
+                  </InfoTip>
+                </div>
+                <div className="mt-4 flex items-center gap-2">
+                  <span className="shrink-0 font-mono text-sm text-[#94A3B8]">/public/</span>
+                  <Input
+                    value={slugInput}
+                    onChange={(event) => setSlugInput(event.target.value)}
+                    placeholder="your-team"
+                    aria-label="Public URL slug"
+                    maxLength={120}
+                    spellCheck={false}
+                  />
+                </div>
+                <p className="mt-2 font-mono text-xs text-[#94A3B8]">
+                  Opens at <span className="text-[#F5F5F7]">/public/{normalizedSlug || 'your-store'}</span>
                 </p>
+              </div>
+              <Button size="sm" onClick={savePublicSlug} loading={savingSlug} disabled={!slugDirty} className="shrink-0">
+                Save URL
+              </Button>
+            </div>
+          </div>
+
+          <div className="border-t border-white/[0.07] p-6 sm:p-8">
+            <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
+              <div className="w-full sm:max-w-md">
+                <div className="flex items-center justify-center gap-3 sm:justify-start">
+                  <MapPin className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
+                  <h2 className="font-semibold text-[#F5F5F7]">Public location</h2>
+                  <InfoTip>
+                    Optional. Shown on the Public Teams map at country level only — never a precise address or coordinates. Leave blank to stay under &quot;Unknown location&quot;.
+                  </InfoTip>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <Input
+                    value={country}
+                    onChange={(event) => setCountry(event.target.value)}
+                    placeholder="Country (e.g. Spain)"
+                    aria-label="Public country"
+                    maxLength={80}
+                  />
+                  <Input
+                    value={city}
+                    onChange={(event) => setCity(event.target.value)}
+                    placeholder="City (optional)"
+                    aria-label="Public city"
+                    maxLength={120}
+                  />
+                </div>
+              </div>
+              <Button size="sm" onClick={saveLocation} loading={savingLocation} disabled={!locationDirty} className="shrink-0">
+                Save location
+              </Button>
+            </div>
+          </div>
+
+          <div className="border-t border-white/[0.07] p-6 sm:p-8">
+            <div className="rounded-3xl border border-white/[0.08] bg-white/[0.025] p-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] sm:p-6">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:text-left">
+                <div>
+                  <div className="flex items-center justify-center gap-3 sm:justify-start">
+                    <ShieldCheck className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
+                    <h2 className="font-semibold text-[#F5F5F7]">Public proof</h2>
+                    <InfoTip>
+                      Enables the public proof page. Each split rule still needs its own Public toggle before it appears there.
+                    </InfoTip>
+                  </div>
+                  <p className="mt-3 font-mono text-xs text-[#94A3B8]">/public/{publicSlug}</p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (publicPageOn) {
+                      void savePublicProof(false);
+                      return;
+                    }
+
+                    setConfirmPublicProofOpen(true);
+                  }}
+                  className={cn(
+                    'public-proof-master-toggle inline-flex min-h-10 min-w-24 items-center justify-center rounded-full border px-5 text-sm font-semibold transition',
+                    publicPageOn
+                      ? 'public-toggle-on border-orange-300/50 bg-orange-500 text-white shadow-[0_0_0_4px_rgba(249,115,22,0.10)]'
+                      : 'border-white/[0.16] bg-white text-[#11131F] hover:bg-white/90'
+                  )}
+                  aria-pressed={publicPageOn}
+                  disabled={savingPublicProof}
+                >
+                  {publicPageOn ? 'On' : 'Off'}
+                </button>
+              </div>
+
+              <div
+                className={cn(
+                  'public-rules-panel mt-5 rounded-2xl border p-3 transition sm:p-4',
+                  publicPageOn
+                    ? 'public-rules-panel-on border-white/[0.10] bg-[#181A26]/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
+                    : 'public-rules-panel-off border-white/[0.08] bg-[#181A26]/38 shadow-[inset_0_1px_0_rgba(255,255,255,0.035)]'
+                )}
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center justify-center gap-3 sm:justify-start">
+                    <div
+                      className={cn(
+                        'public-rules-icon flex h-9 w-9 items-center justify-center rounded-xl text-[#FF2D78]',
+                        publicPageOn ? 'bg-[#FF2D78]/14' : 'bg-white/[0.06]'
+                      )}
+                    >
+                      <Globe2 className="h-4.5 w-4.5" strokeWidth={1.8} />
+                    </div>
+                    <div className="text-center sm:text-left">
+                      <p className="text-sm font-semibold text-[#F5F5F7]">Public rules</p>
+                      <p className="mt-1 font-mono text-xs text-[#94A3B8]">
+                        {publicPageOn
+                          ? `${publicRules.length} public · ${splitRules.length} total`
+                          : `Off · ${publicRules.length} saved public · ${splitRules.length} total`}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="public-rules-filter mx-auto grid w-full max-w-xs grid-cols-2 gap-1 rounded-full border border-white/[0.08] bg-white/[0.035] p-1 sm:mx-0">
+                    <button
+                      type="button"
+                      onClick={() => setShowPublicRulesOnly(true)}
+                      className={cn(
+                        'rounded-full px-3 py-2 text-xs font-semibold transition',
+                        showPublicRulesOnly
+                          ? 'bg-[#FF2D78] text-white'
+                          : 'text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F5F5F7]'
+                      )}
+                    >
+                      Public only
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowPublicRulesOnly(false)}
+                      className={cn(
+                        'rounded-full px-3 py-2 text-xs font-semibold transition',
+                        !showPublicRulesOnly
+                          ? 'bg-[#FF2D78] text-white'
+                          : 'text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F5F5F7]'
+                      )}
+                    >
+                      All rules
+                    </button>
+                  </div>
+                </div>
+
+                {!publicPageOn && (
+                  <div className="public-rules-paused mt-4 rounded-2xl border border-orange-300/20 bg-orange-400/[0.08] px-4 py-3 text-sm font-medium text-orange-100">
+                    Public proof is Off. Saved public-rule choices are paused and hidden from visitors.
+                  </div>
+                )}
+
+                <div className="public-rules-list mt-4 overflow-hidden rounded-2xl border border-white/[0.10] bg-[#11131F]/52">
+                  {splitRulesLoading && (
+                    <p className="p-4 text-sm text-[#94A3B8]">Loading rules...</p>
+                  )}
+
+                  {!splitRulesLoading && displayedPublicRules.length === 0 && (
+                    <p className="p-4 text-sm text-[#94A3B8]">
+                      {showPublicRulesOnly ? 'No public rules yet.' : 'No split rules yet.'}
+                    </p>
+                  )}
+
+                  {!splitRulesLoading &&
+                    displayedPublicRules.map((rule) => {
+                      const wallets = activeTargets(rule).length;
+                      const total = allocationTotal(rule);
+                      const busy = toggleSplitPublic.isPending;
+                      const toggleDisabled = busy || !publicPageOn;
+
+                      return (
+                        <div
+                          key={rule.id}
+                          className={cn(
+                            'public-rule-row grid gap-3 border-b border-white/[0.07] p-4 text-left transition last:border-b-0 lg:grid-cols-[minmax(180px,1fr)_auto_auto]',
+                            publicPageOn
+                              ? 'bg-[#151722]/82 hover:bg-[#181A26]'
+                              : 'bg-[#151722]/48'
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="truncate text-sm font-semibold text-[#F5F5F7]">{rule.name}</p>
+                              <Badge variant={rule.active ? 'success' : 'default'}>{rule.active ? 'Active' : 'Inactive'}</Badge>
+                            </div>
+                            <p className="mt-2 font-mono text-xs text-[#94A3B8]">
+                              v{rule.version} · {wallets} wallets · {total}% allocated
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-2 lg:justify-end">
+                            <span className="text-xs font-semibold text-[#94A3B8]">Public</span>
+                            <button
+                              type="button"
+                              onClick={() => void toggleRulePublic(rule)}
+                              disabled={toggleDisabled}
+                              aria-pressed={publicPageOn && rule.public_enabled}
+                              title={!publicPageOn ? 'Turn Public proof on before publishing rules' : undefined}
+                              className={cn(
+                                'public-rule-toggle relative h-8 w-16 rounded-full border transition focus:outline-none focus:ring-2 focus:ring-[#FF2D78]/30',
+                                toggleDisabled && 'cursor-not-allowed',
+                                publicPageOn && rule.public_enabled
+                                  ? 'border-[#FF2D78]/55 bg-[#FF2D78]'
+                                  : 'border-white/[0.16] bg-white/[0.08]',
+                                !publicPageOn && rule.public_enabled && 'border-orange-300/28 bg-orange-400/[0.12]'
+                              )}
+                            >
+                              <span
+                                className={cn(
+                                  'absolute top-1 h-6 w-6 rounded-full bg-white shadow transition',
+                                  rule.public_enabled ? 'left-9' : 'left-1',
+                                  !publicPageOn && 'bg-white/75'
+                                )}
+                              />
+                              <span className="sr-only">
+                                {rule.public_enabled ? 'Hide rule from public page' : 'Show rule on public page'}
+                              </span>
+                            </button>
+                          </div>
+
+                          <p className={cn(
+                            'self-center font-mono text-xs font-semibold lg:text-right',
+                            publicPageOn && rule.public_enabled
+                              ? 'text-[#FF2D78]'
+                              : rule.public_enabled
+                                ? 'text-orange-200'
+                                : 'text-[#94A3B8]'
+                          )}>
+                            {publicPageOn ? (rule.public_enabled ? 'ON' : 'OFF') : (rule.public_enabled ? 'PAUSED' : 'OFF')}
+                          </p>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-white/[0.07] p-6 sm:p-8">
+            <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+              <div>
+                <div className="flex items-center justify-center gap-3 sm:justify-start">
+                  <h2 className="font-semibold text-[#F5F5F7]">Appearance</h2>
+                  <InfoTip>
+                    Sets the interface theme for this browser only. Payment records, Split Proofs, and public data stay unchanged.
+                  </InfoTip>
+                </div>
               </div>
 
               <div className="grid w-full max-w-xs grid-cols-2 gap-2 rounded-lg border border-white/[0.08] bg-white/[0.035] p-1.5">
@@ -128,6 +561,30 @@ export function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={confirmPublicProofOpen}
+        logoSrc="/brand/OpenSplit-navbar.svg"
+        title="Enable public proof?"
+        description="Only the rules you publish will be visible. Private wallet data stays hidden."
+        cancelLabel="Cancel"
+        confirmLabel="Enable"
+        celebrateOnConfirm
+        loading={savingPublicProof}
+        confirmDisabled={savingPublicProof}
+        onClose={() => setConfirmPublicProofOpen(false)}
+        onConfirm={() => {
+          void savePublicProof(true);
+        }}
+      >
+        <div className="public-proof-confirm-summary mx-auto flex max-w-[18rem] items-center justify-between gap-3 rounded-2xl border border-white/[0.12] bg-white/[0.045] px-4 py-3 text-left">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#FF2D78]">Visible rules</p>
+            <p className="mt-0.5 text-sm font-semibold text-white">{publicRules.length} selected</p>
+          </div>
+          <span className="rounded-full bg-[#FF2D78]/12 px-3 py-1 text-xs font-semibold text-[#FF2D78]">Public</span>
+        </div>
+      </ConfirmDialog>
 
       <Button
         variant="ghost"

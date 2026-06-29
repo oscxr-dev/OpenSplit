@@ -12,6 +12,12 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { cn, formatDateShort, formatFiat, formatSats, payoutStatusLabel } from '@/lib/utils';
+import {
+  completedSummary,
+  hasProofMismatch,
+  isDemoHistoryPayment,
+  paymentPayoutStatus,
+} from '@/lib/payments';
 import type { Invoice, PaymentSplit } from '@/types/api';
 
 type StatusFilter = 'all' | 'completed' | 'in_progress' | 'failed';
@@ -22,35 +28,6 @@ const statuses: Array<{ value: StatusFilter; label: string }> = [
   { value: 'in_progress', label: 'In progress' },
   { value: 'failed', label: 'Failed' },
 ];
-
-function paymentPayoutStatus(payment: Invoice): string {
-  if (payment.splits.some((split) => split.status === 'failed')) return 'failed';
-  if (payment.splits.some((split) => ['pending', 'in_progress'].includes(split.status))) {
-    return 'in_progress';
-  }
-  if (payment.splits.length && payment.splits.every((split) => split.status === 'completed')) {
-    return 'completed';
-  }
-  return payment.status;
-}
-
-function completedSummary(payment: Invoice): string {
-  const completed = payment.splits.filter((split) => split.status === 'completed').length;
-  return payment.splits.length ? `${completed}/${payment.splits.length} shares settled` : 'No split recorded';
-}
-
-function splitTotal(payment: Invoice): number {
-  return payment.splits.reduce((sum, split) => sum + split.amount_sats, 0);
-}
-
-function hasProofMismatch(payment: Invoice): boolean {
-  return payment.splits.length > 0 && splitTotal(payment) !== payment.amount_sats;
-}
-
-function isDemoHistoryPayment(payment: Invoice): boolean {
-  const memo = (payment.memo || '').toLowerCase();
-  return memo.includes('demo') || payment.splits.every((split) => split.status === 'cancelled');
-}
 
 export function PaymentsPage() {
   const [searchParams, setSearchParams] = useSearchParams();

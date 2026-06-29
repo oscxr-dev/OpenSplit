@@ -9,7 +9,6 @@
   "background_color": "#0A0B12",
   "categories": ["finance", "business"],
   "icons": [
-    {"src": "/icons/cubo-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
-    {"src": "/icons/cubo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}
+    {"src": "/brand/OpenSplitlogo.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
   ]
 }

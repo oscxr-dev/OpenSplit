@@ -11,7 +11,14 @@ from app.core.deps import get_current_tenant, get_current_user
 from app.core.percentages import quantized_total
 from app.database import get_session
 from app.models import Payment, PaymentSplit, SplitRule, SplitTarget, Tenant, User
-from app.schemas import SplitRuleCreate, SplitRuleResponse, SplitRuleUpdate, SplitTargetCreate, SplitTargetSchema
+from app.schemas import (
+    SplitRuleCreate,
+    SplitRulePublicUpdate,
+    SplitRuleResponse,
+    SplitRuleUpdate,
+    SplitTargetCreate,
+    SplitTargetSchema,
+)
 from app.services.lnd_client import load_lnd_receiver
 
 router = APIRouter(prefix="/splits", tags=["splits"])
@@ -89,10 +96,13 @@ def _validate_existing_rule_targets(targets: list[SplitTarget], tenant: Tenant) 
     total = quantized_total(
         t.percentage for t in targets if float(t.percentage or 0) > 0
     )
-    if total != Decimal("100"):
+    # Partial split rules are allowed: the active non-zero targets may total
+    # anywhere in (0, 100]. Any unallocated remainder stays in the store. Reject
+    # over-allocation (> 100%) and empty rules.
+    if total <= Decimal("0") or total > Decimal("100"):
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Active non-zero targets must sum to 100%, got {total}%",
+            detail=f"Active non-zero targets must total >0 and ≤100%, got {total}%",
         )
 
     errors: list[str] = []
@@ -126,6 +136,7 @@ async def _build_response(rule: SplitRule, session: AsyncSession) -> SplitRuleRe
         id=rule.id,
         name=rule.name,
         active=rule.active,
+        public_enabled=rule.public_enabled,
         version=rule.version,
         parent_rule_id=rule.parent_rule_id,
         targets=target_schemas,
@@ -309,11 +320,10 @@ async def activate_split(
             ),
         )
 
-    # Deactivate all other rules for this tenant
-    for other in all_rules:
-        if other.id != rule.id:
-            other.active = False
-
+    # Multiple rules may be active at once (each surfaces as a board tab). We do
+    # NOT deactivate the others here. Within a single lineage the supersede guard
+    # above still prevents an older version from re-activating while a newer one
+    # is active; different rules can be active side by side.
     rule.active = True
     await session.commit()
     logger.info(
@@ -322,6 +332,59 @@ async def activate_split(
         rule_id=str(rule.id),
         version=rule.version,
         name=rule.name,
+    )
+    return await _build_response(rule, session)
+
+
+@router.post("/{rule_id}/deactivate", response_model=SplitRuleResponse)
+async def deactivate_split(
+    rule_id: str,
+    current_user: User = Depends(get_current_user),
+    tenant: Tenant = Depends(get_current_tenant),
+    session: AsyncSession = Depends(get_session),
+) -> SplitRuleResponse:
+    result = await session.execute(
+        select(SplitRule).where(SplitRule.id == rule_id, SplitRule.tenant_id == tenant.id)
+    )
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Split rule not found")
+
+    rule.active = False
+    await session.commit()
+    logger.info(
+        "split_deactivated",
+        tenant_id=str(tenant.id),
+        rule_id=str(rule.id),
+        version=rule.version,
+        name=rule.name,
+    )
+    return await _build_response(rule, session)
+
+
+@router.patch("/{rule_id}/public", response_model=SplitRuleResponse)
+async def update_split_public_visibility(
+    rule_id: str,
+    body: SplitRulePublicUpdate,
+    current_user: User = Depends(get_current_user),
+    tenant: Tenant = Depends(get_current_tenant),
+    session: AsyncSession = Depends(get_session),
+) -> SplitRuleResponse:
+    result = await session.execute(
+        select(SplitRule).where(SplitRule.id == rule_id, SplitRule.tenant_id == tenant.id)
+    )
+    rule = result.scalar_one_or_none()
+    if not rule:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Split rule not found")
+
+    rule.public_enabled = body.public_enabled
+    await session.commit()
+    logger.info(
+        "split_public_visibility_updated",
+        tenant_id=str(tenant.id),
+        rule_id=str(rule.id),
+        version=rule.version,
+        public_enabled=rule.public_enabled,
     )
     return await _build_response(rule, session)
 

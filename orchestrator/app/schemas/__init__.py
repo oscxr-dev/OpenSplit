@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime
 from decimal import Decimal
@@ -35,15 +36,52 @@ class TenantResponse(BaseModel):
     brand_display_name: str | None = None
     brand_color: str | None = None
     brand_logo_url: str | None = None
+    public_slug: str | None = None
+    public_transparency_enabled: bool = False
+    public_country: str | None = None
+    public_city: str | None = None
     active: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
+def _normalize_slug(value: str) -> str:
+    slug = value.strip().lower()
+    slug = re.sub(r"['’]", "", slug)
+    slug = re.sub(r"[^a-z0-9]+", "-", slug).strip("-")
+    return slug
+
+
 class TenantUpdate(BaseModel):
     name: str | None = None
     lnbits_url: str | None = None
+    public_slug: str | None = None
+    public_transparency_enabled: bool | None = None
+    public_country: str | None = None
+    public_city: str | None = None
+
+    @field_validator("public_slug")
+    @classmethod
+    def normalize_public_slug(cls, value: str | None) -> str | None:
+        # Slugs must be lowercase, URL-safe, no spaces. Normalize defensively so
+        # the saved value is always a valid public route (e.g. "Oscar Shop's" ->
+        # "oscar-shops"). None means "not provided" and is left untouched.
+        if value is None:
+            return None
+        slug = _normalize_slug(value)
+        if not slug:
+            raise ValueError("Public URL slug must contain letters or numbers")
+        return slug
+
+    @field_validator("public_country", "public_city")
+    @classmethod
+    def trim_location(cls, value: str | None) -> str | None:
+        # Coarse, optional location labels. Trim; blank becomes None ("Unknown").
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
 
 
 class TenantHealth(BaseModel):
@@ -71,6 +109,7 @@ class SplitRuleResponse(BaseModel):
     id: uuid.UUID
     name: str
     active: bool
+    public_enabled: bool = False
     version: int
     parent_rule_id: uuid.UUID | None = None
     targets: list[SplitTargetSchema]
@@ -118,10 +157,13 @@ class SplitRuleCreate(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_100(self) -> SplitRuleCreate:
+    def validate_total(self) -> SplitRuleCreate:
+        # Partial split rules are allowed: targets may total anywhere in (0, 100].
+        # Any unallocated remainder simply stays in the store. Over-allocation
+        # (> 100%) is rejected.
         total = quantized_total(t.percentage for t in self.targets)
-        if total != Decimal("100"):
-            raise ValueError(f"Target percentages must sum to 100%, got {total}%")
+        if total <= Decimal("0") or total > Decimal("100"):
+            raise ValueError(f"Target percentages must total >0 and <=100%, got {total}%")
         return self
 
 
@@ -140,12 +182,17 @@ class SplitRuleUpdate(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def validate_100_if_targets(self) -> SplitRuleUpdate:
+    def validate_total_if_targets(self) -> SplitRuleUpdate:
+        # Partial split rules allowed: total may be in (0, 100]. Reject > 100%.
         if self.targets is not None:
             total = quantized_total(t.percentage for t in self.targets)
-            if total != Decimal("100"):
-                raise ValueError(f"Target percentages must sum to 100%, got {total}%")
+            if total <= Decimal("0") or total > Decimal("100"):
+                raise ValueError(f"Target percentages must total >0 and <=100%, got {total}%")
         return self
+
+
+class SplitRulePublicUpdate(BaseModel):
+    public_enabled: bool
 
 
 # ── Invoices ──────────────────────────────────────────────────────────────
@@ -252,8 +299,10 @@ class ProofSplitResponse(BaseModel):
 class ProofIntegrity(BaseModel):
     payment_amount_sats: int
     split_sum_sats: int
-    difference_sats: int  # payment_amount_sats - split_sum_sats
-    balanced: bool  # True when split amounts sum exactly to the payment amount
+    unallocated_store_sats: int = 0
+    pending_remainder_sats: int = 0
+    difference_sats: int  # payment_amount_sats - split_sum_sats - store - pending
+    balanced: bool  # True when split amounts + store remainder + pending remainder sum exactly to payment
 
 
 class SplitProofResponse(BaseModel):
@@ -274,6 +323,13 @@ class PublicSplitMember(BaseModel):
     percentage: float
 
 
+class PublicSplitRule(BaseModel):
+    name: str
+    version: int
+    completed_split_count: int = 0
+    distribution: list[PublicSplitMember]
+
+
 class PublicRecentPayment(BaseModel):
     status: str
     paid_at: datetime | None = None
@@ -284,9 +340,28 @@ class PublicTransparencyResponse(BaseModel):
     name: str  # workspace/project display name
     slug: str
     show_amounts: bool
+    public_rules: list[PublicSplitRule] = Field(default_factory=list)
     distribution: list[PublicSplitMember]
     recent_payments: list[PublicRecentPayment]
     total_sats: int | None = None  # populated only when show_amounts is true
+
+
+# ── Public Teams discovery (opt-in, unauthenticated) ───────────────────────
+# Privacy: activity METADATA only. Never money volume / sats / fiat / balances,
+# never ln_address, payout destinations, emails, or private config.
+class PublicTeamSummary(BaseModel):
+    name: str
+    slug: str
+    active_rule_count: int
+    completed_splits: int
+    last_activity: datetime | None = None
+    created_at: datetime
+    country: str | None = None
+    city: str | None = None
+
+
+class PublicTeamsResponse(BaseModel):
+    teams: list[PublicTeamSummary]
 
 
 # ── Webhook ───────────────────────────────────────────────────────────────

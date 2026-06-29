@@ -63,6 +63,25 @@ def test_proof_unbalanced_when_splits_do_not_sum():
     assert proof.integrity.balanced is False
 
 
+def test_proof_balances_with_store_and_pending_remainders():
+    rows = [_row(amount_sats=20), _row(amount_sats=20), _row(amount_sats=20)]
+    proof = build_proof(
+        payment_id=uuid.uuid4(),
+        amount_sats=101,
+        unallocated_store_sats=40,
+        pending_remainder_sats=1,
+        status="paid",
+        split_rule_id=None,
+        split_rule_version=None,
+        rows=rows,
+    )
+    assert proof.integrity.split_sum_sats == 60
+    assert proof.integrity.unallocated_store_sats == 40
+    assert proof.integrity.pending_remainder_sats == 1
+    assert proof.integrity.difference_sats == 0
+    assert proof.integrity.balanced is True
+
+
 def test_proof_carries_member_fields_including_payout():
     sid = uuid.uuid4()
     rows = [

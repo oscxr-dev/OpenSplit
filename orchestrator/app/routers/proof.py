@@ -45,6 +45,8 @@ def build_proof(
     *,
     payment_id: uuid.UUID,
     amount_sats: int,
+    unallocated_store_sats: int = 0,
+    pending_remainder_sats: int = 0,
     status: str,
     split_rule_id: uuid.UUID | None,
     split_rule_version: int | None,
@@ -67,11 +69,14 @@ def build_proof(
     ]
 
     split_sum = sum(row.amount_sats for row in rows)
+    difference_sats = amount_sats - split_sum - unallocated_store_sats - pending_remainder_sats
     integrity = ProofIntegrity(
         payment_amount_sats=amount_sats,
         split_sum_sats=split_sum,
-        difference_sats=amount_sats - split_sum,
-        balanced=(split_sum == amount_sats),
+        unallocated_store_sats=unallocated_store_sats,
+        pending_remainder_sats=pending_remainder_sats,
+        difference_sats=difference_sats,
+        balanced=(difference_sats == 0),
     )
 
     return SplitProofResponse(
@@ -136,6 +141,8 @@ async def get_split_proof(
     return build_proof(
         payment_id=payment.id,
         amount_sats=payment.amount_sats,
+        unallocated_store_sats=payment.unallocated_store_sats,
+        pending_remainder_sats=payment.pending_remainder_sats,
         status=payment.status,
         split_rule_id=payment.split_rule_id,
         split_rule_version=split_rule_version,

@@ -49,8 +49,14 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
 
   const targets = watch('targets');
   const totalPercentage = targets?.reduce((sum, t) => sum + (Number(t.percentage) || 0), 0) || 0;
-  const diffFrom100 = Math.round((100 - totalPercentage) * 100) / 100;
-  const isValidTotal = Math.abs(diffFrom100) < 0.01 && totalPercentage > 0;
+  const remainder = Math.round((100 - totalPercentage) * 100) / 100;
+  const overAllocated = totalPercentage > 100.001;
+  const fullyAllocated = Math.abs(remainder) < 0.01;
+  // Partial split rules are allowed: valid when the total is > 0 and not over
+  // 100%. When it's below 100%, the unallocated remainder stays in the store.
+  const isValidTotal = totalPercentage > 0 && !overAllocated;
+
+  const fmtPct = (value: number) => (Number.isInteger(value) ? `${value}` : value.toFixed(1));
 
   const handleFormSubmit = useCallback(
     async (data: SplitRuleFormData) => {
@@ -91,17 +97,17 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
   }
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5">
       <Input
         label="Rule name"
-        placeholder="Example: BitCrew"
+        placeholder="Example: Weekend split"
         error={errors.name?.message}
         {...register('name')}
       />
 
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-gray-700">Destinations</h4>
+          <h4 className="text-sm font-semibold text-white/90">Destinations</h4>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={splitEvenly}>
               Split evenly
@@ -116,24 +122,24 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
         {fields.map((field, index) => (
           <div
             key={field.id}
-            className="space-y-2.5 rounded-lg border border-white/[0.08] bg-white/[0.035] p-3"
+            className="space-y-2.5 rounded-xl border border-white/[0.16] bg-white/[0.06] p-3.5"
           >
             <div className="flex items-center gap-2">
-              <GripVertical className="w-4 h-4 text-gray-300 flex-shrink-0" />
+              <GripVertical className="w-4 h-4 text-white/30 flex-shrink-0" />
               <span
                 className={cn(
                   'w-2.5 h-2.5 rounded-full flex-shrink-0',
                   TARGET_COLORS[index % TARGET_COLORS.length]
                 )}
               />
-              <span className="text-xs font-medium text-gray-400">
+              <span className="text-xs font-semibold text-white/70">
                 Destination {index + 1}
               </span>
               {fields.length > 1 && (
                 <button
                   type="button"
                   onClick={() => remove(index)}
-                  className="ml-auto p-1 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"
+                  className="ml-auto rounded-lg p-1 text-white/40 transition-colors hover:bg-red-500/10 hover:text-red-300"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
@@ -149,7 +155,7 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
               />
               {targets?.[index]?.has_lnd_receiver ? (
                 <div className="w-full">
-                  <span className="mb-1.5 block text-xs font-medium text-white/55">
+                  <span className="mb-1.5 block text-xs font-semibold text-white/70">
                     Lightning address
                   </span>
                   <div className="flex items-center gap-2 rounded-xl border border-emerald-300/15 bg-emerald-400/10 px-4 py-2.5 text-sm text-emerald-300">
@@ -180,44 +186,44 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
         ))}
       </div>
 
-      {/* Total indicator */}
+      {/* Allocation indicator — partial rules are allowed; the remainder stays in store. */}
       <div
         className={cn(
-          'flex items-center justify-between px-4 py-3 rounded-xl text-sm font-medium',
-          isValidTotal
-            ? 'border border-emerald-300/10 bg-emerald-400/10 text-emerald-300'
+          'rounded-xl px-4 py-3',
+          overAllocated
+            ? 'border border-red-300/10 bg-red-400/10 text-red-300'
             : totalPercentage > 0
-              ? 'border border-red-300/10 bg-red-400/10 text-red-300'
+              ? 'border border-emerald-300/10 bg-emerald-400/10 text-emerald-300'
               : 'border border-white/[0.07] bg-white/[0.035] text-white/40'
         )}
       >
-        <span>Total</span>
-        <span className="tabular-nums font-bold">
-          {totalPercentage.toFixed(1)}%
-          {!isValidTotal && totalPercentage > 0 && (
-            <span className="ml-1 text-xs">
-              ({diffFrom100 > 0 ? `+${diffFrom100}%` : `${diffFrom100}%`})
-            </span>
-          )}
-        </span>
+        <div className="flex items-center justify-between text-sm font-medium">
+          <span>{overAllocated ? 'Over-allocated' : `${fmtPct(totalPercentage)}% allocated`}</span>
+          <span className="tabular-nums font-bold">{totalPercentage.toFixed(1)}%</span>
+        </div>
+        {overAllocated ? (
+          <p className="mt-1 text-xs">Totals can&apos;t exceed 100%. Reduce by {fmtPct(totalPercentage - 100)}%.</p>
+        ) : totalPercentage > 0 && !fullyAllocated ? (
+          <p className="mt-1 text-xs text-white/55">{fmtPct(remainder)}% stays in store</p>
+        ) : null}
       </div>
 
       {errors.targets?.root?.message && (
-        <p className="text-sm text-red-600">{errors.targets.root.message}</p>
+        <p className="text-sm text-red-300">{errors.targets.root.message}</p>
       )}
       {typeof errors.targets?.message === 'string' && (
-        <p className="text-sm text-red-600">{errors.targets.message}</p>
+        <p className="text-sm text-red-300">{errors.targets.message}</p>
       )}
 
-      <div className="flex gap-3 pt-2">
-        <Button type="button" variant="ghost" onClick={onCancel} className="flex-1">
+      <div className="flex gap-3 pt-3">
+        <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
           Cancel
         </Button>
         <Button
           type="submit"
           loading={submitting}
           disabled={!isValidTotal}
-          className="flex-1"
+          className="flex-1 disabled:!opacity-100 disabled:!border-white/10 disabled:!bg-white/[0.09] disabled:!text-white/45"
         >
           Save
         </Button>

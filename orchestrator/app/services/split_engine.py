@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_DOWN
 
@@ -14,53 +15,121 @@ from app.services.btcpay_client import BTCPayClient
 from app.services.lnd_client import LNDClient, load_lnd_receiver
 
 
-def calculate_splits(
+@dataclass(frozen=True)
+class SplitAllocation:
+    """Auditable result of integer-only split math.
+
+    ``splits`` contains only whole-sat target payouts.
+    ``unallocated_store_sats`` is the intentional store remainder from partial
+    rules where total target percentages are < 100%.
+    ``pending_remainder_sats`` is the whole-sat dust that cannot be assigned to
+    either targets or the intentional store remainder without inventing
+    fractional sats, plus tiny-payment amounts that are too small to give all
+    rule targets a fair minimum 1-sat payout. It belongs to store treasury until
+    a future explicit withdrawal or redistribution policy exists.
+    """
+
+    splits: list[tuple[SplitTarget, int]]
+    allocated_sats: int
+    unallocated_store_sats: int
+    pending_remainder_sats: int
+
+
+def calculate_split_allocation(
     amount_sats: int, targets: list[SplitTarget]
-) -> list[tuple[SplitTarget, int]]:
-    """Exact integer distribution via largest remainder algorithm.
-    
-    Guarantee: sum(splits) == amount_sats for any valid amount and percentages.
-    Tiebreaker: when fractional parts are equal, lower order wins.
+) -> SplitAllocation:
+    """Integer split distribution using largest remainder + pending remainder.
+
+    Policy:
+    - calculate exact shares from payment amount and percentages;
+    - floor each target share to whole sats;
+    - distribute payable leftover sats to largest fractional remainders;
+    - break ties deterministically by rule target order, then target id;
+    - preserve partial rules: the intentionally unallocated store share is not
+      paid to targets;
+    - if the target-payable amount is smaller than the number of active targets,
+      do not pay only one winner; keep that target-payable amount as pending
+      store treasury instead;
+    - if a whole sat is left after flooring both the payable target share and
+      the intentional store share, keep it as ``pending_remainder_sats``.
     """
     if amount_sats <= 0:
         raise ValueError("amount_sats must be positive")
 
     # Same 2-decimal total the API enforces, so any rule the API accepts is
-    # processable here.
+    # processable here. Partial rules (< 100%) are allowed; over-allocation is not.
     total_pct = quantized_total(t.percentage for t in targets)
-    if total_pct != Decimal("100"):
-        raise ValueError(f"Percentages must sum to 100, got {total_pct}")
+    if total_pct <= Decimal("0") or total_pct > Decimal("100"):
+        raise ValueError(f"Percentages must total >0 and <=100, got {total_pct}")
 
-    # Step 1: exact fractional amount per target
+    # Step 1: exact fractional amount per target.
     exact_amounts: list[tuple[SplitTarget, Decimal]] = [
         (t, Decimal(amount_sats) * Decimal(str(t.percentage)) / Decimal("100"))
         for t in targets
     ]
 
-    # Step 2: floor each
+    # Step 2: floor each target payout to whole sats.
     floor_amounts: list[tuple[SplitTarget, int, Decimal]] = [
         (t, int(exact.to_integral_value(rounding=ROUND_DOWN)), exact)
         for t, exact in exact_amounts
     ]
 
-    # Step 3: remainder in whole sats
-    distributed = sum(amt for _, amt, _ in floor_amounts)
-    remainder = amount_sats - distributed
+    # Step 3: only the configured target share is payable to targets. The
+    # intentional store share is accounted separately, and any indivisible sat
+    # left between those two floors becomes pending remainder.
+    payable_target_sats = int(
+        (Decimal(amount_sats) * total_pct / Decimal("100")).to_integral_value(rounding=ROUND_DOWN)
+    )
+    unallocated_pct = Decimal("100") - total_pct
+    unallocated_store_sats = int(
+        (Decimal(amount_sats) * unallocated_pct / Decimal("100")).to_integral_value(rounding=ROUND_DOWN)
+    )
+    pending_remainder_sats = amount_sats - payable_target_sats - unallocated_store_sats
+    if pending_remainder_sats < 0:
+        # Defensive guard: Decimal flooring should prevent this, but never let
+        # rounding metadata make the audit trail negative.
+        pending_remainder_sats = 0
 
-    # Step 4: sort by lost fraction descending, assign 1 sat to top N
+    active_target_count = len(targets)
+    if payable_target_sats < active_target_count:
+        pending_remainder_sats += payable_target_sats
+        payable_target_sats = 0
+
+    distributed_floor_sats = sum(amt for _, amt, _ in floor_amounts)
+    if payable_target_sats == 0:
+        floor_amounts = [(target, 0, exact) for target, _, exact in floor_amounts]
+        distributed_floor_sats = 0
+    remainder_to_targets = payable_target_sats - distributed_floor_sats
+
+    # Step 4: sort by lost fraction descending, then stable rule order and id.
     fractions = sorted(
         floor_amounts,
-        key=lambda x: (x[2] - x[1], -x[0].order),  # largest fraction, then lower order
-        reverse=True,
+        key=lambda x: (-(x[2] - x[1]), x[0].order, str(x[0].id)),
     )
 
     result: dict[str, tuple[SplitTarget, int]] = {}
     for i, (target, floor_amt, _) in enumerate(fractions):
-        extra = 1 if i < remainder else 0
+        extra = 1 if i < remainder_to_targets else 0
         result[str(target.id)] = (target, floor_amt + extra)
 
-    # Return in original target order
-    return [result[str(t.id)] for t in targets]
+    splits = [result[str(t.id)] for t in targets]
+    return SplitAllocation(
+        splits=splits,
+        allocated_sats=sum(amount for _, amount in splits),
+        unallocated_store_sats=unallocated_store_sats,
+        pending_remainder_sats=pending_remainder_sats,
+    )
+
+
+def calculate_splits(
+    amount_sats: int, targets: list[SplitTarget]
+) -> list[tuple[SplitTarget, int]]:
+    """Backward-compatible split list for callers that only need target payouts.
+
+    See ``calculate_split_allocation`` for the full auditable allocation,
+    including intentional store remainder and pending indivisible remainder.
+    """
+    return calculate_split_allocation(amount_sats, targets).splits
 
 
 def derive_payment_status(splits: list[PaymentSplit]) -> str:
@@ -102,11 +171,13 @@ class SplitEngine:
 
         # Find active rule
         result = await self.session.execute(
-            select(SplitRule).where(
+            select(SplitRule)
+            .where(
                 SplitRule.tenant_id == payment.tenant_id, SplitRule.active == True
             )
+            .order_by(SplitRule.version.desc(), SplitRule.created_at.desc())
         )
-        rule = result.scalar_one_or_none()
+        rule = result.scalars().first()
 
         if rule is None:
             payment.status = "paid"
@@ -123,8 +194,11 @@ class SplitEngine:
         )
         targets: list[SplitTarget] = list(result.scalars().all())
 
-        # Calculate exact split amounts (largest remainder algorithm)
-        splits = calculate_splits(payment.amount_sats, targets)
+        # Calculate exact split amounts plus auditable remainder metadata.
+        allocation = calculate_split_allocation(payment.amount_sats, targets)
+        splits = allocation.splits
+        payment.unallocated_store_sats = allocation.unallocated_store_sats
+        payment.pending_remainder_sats = allocation.pending_remainder_sats
 
         # Record audit trail for the calculated split
         records: list[PaymentSplit] = []
@@ -171,11 +245,13 @@ class SplitEngine:
 
         # Find active rule
         result = await self.session.execute(
-            select(SplitRule).where(
+            select(SplitRule)
+            .where(
                 SplitRule.tenant_id == payment.tenant_id, SplitRule.active == True
             )
+            .order_by(SplitRule.version.desc(), SplitRule.created_at.desc())
         )
-        rule = result.scalar_one_or_none()
+        rule = result.scalars().first()
 
         if rule is None:
             payment.status = "paid"
@@ -192,14 +268,17 @@ class SplitEngine:
         )
         targets: list[SplitTarget] = list(result.scalars().all())
 
-        # Exact split amounts (largest remainder algorithm — same as LNbits path)
-        splits = calculate_splits(payment.amount_sats, targets)
+        # Exact split amounts plus auditable remainder metadata — same as LNbits path.
+        allocation = calculate_split_allocation(payment.amount_sats, targets)
+        splits = allocation.splits
 
         # Claim as in_progress and commit (releasing the lock) before sending any
         # payout, so a concurrent processor sees a non-pending status and never
         # pays the same invoice. Final status is set after the payout loop.
         payment.status = "in_progress"
         payment.split_rule_id = rule.id
+        payment.unallocated_store_sats = allocation.unallocated_store_sats
+        payment.pending_remainder_sats = allocation.pending_remainder_sats
         payment.paid_at = datetime.now(timezone.utc)
         await self.session.commit()
 

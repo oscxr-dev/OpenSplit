@@ -34,11 +34,14 @@ async def get_wallet_balances(
     tenant: Tenant = Depends(get_current_tenant),
     session: AsyncSession = Depends(get_session),
 ) -> WalletsBalancesResponse:
-    # 1. Get active split rule
+    # 1. Get active split rule. Multiple rules can be active (board tabs); use the
+    #    deterministic default (newest active) that invoice/payout creation uses.
     result = await session.execute(
-        select(SplitRule).where(SplitRule.tenant_id == tenant.id, SplitRule.active == True)
+        select(SplitRule)
+        .where(SplitRule.tenant_id == tenant.id, SplitRule.active == True)
+        .order_by(SplitRule.version.desc(), SplitRule.created_at.desc())
     )
-    active_rule = result.scalar_one_or_none()
+    active_rule = result.scalars().first()
     if not active_rule:
         return WalletsBalancesResponse(wallets=[], total_accumulated_sats=0)
 

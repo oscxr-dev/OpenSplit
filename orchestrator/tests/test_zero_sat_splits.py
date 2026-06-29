@@ -26,7 +26,7 @@ pytestmark = pytest.mark.asyncio
 _BASE_URL = settings.db_url.rsplit("/", 1)[0]
 TEST_DB_URL = f"{_BASE_URL}/orchestrator_test"
 
-# 1 sat over five equal targets: largest-remainder gives [1, 0, 0, 0, 0].
+# 1 sat over five equal targets is too small to pay only one winner.
 EQUAL_FIFTHS = [20, 20, 20, 20, 20]
 
 
@@ -124,6 +124,13 @@ async def _payment_status(Session, payment_id) -> str:
         return (await s.execute(select(Payment.status).where(Payment.id == payment_id))).scalar_one()
 
 
+async def _payment_remainder(Session, payment_id) -> int:
+    async with Session() as s:
+        return (
+            await s.execute(select(Payment.pending_remainder_sats).where(Payment.id == payment_id))
+        ).scalar_one()
+
+
 async def test_btcpay_zero_sat_split_is_skipped_not_failed(Session, monkeypatch):
     """0-sat splits are skipped (no payout attempt, no failed/completed)."""
     monkeypatch.setattr(split_mod, "load_lnd_receiver", lambda label: None)
@@ -133,15 +140,16 @@ async def test_btcpay_zero_sat_split_is_skipped_not_failed(Session, monkeypatch)
     async with Session() as s:
         await SplitEngine(s, lnbits_client=None).execute_splits_btcpay(payment_id, btcpay)
 
-    assert all(amt > 0 for _, amt in btcpay.calls), f"attempted 0-sat payouts: {btcpay.calls}"
+    assert btcpay.calls == []
 
     states = await _split_states(Session, payment_id)
     skipped = [amt for amt, st in states if st == "skipped"]
     failed = [amt for amt, st in states if st == "failed"]
     assert failed == [], f"0-sat splits left as failed: {states}"
-    assert len(skipped) == 4 and all(amt == 0 for amt in skipped), states
+    assert len(skipped) == 5 and all(amt == 0 for amt in skipped), states
+    assert await _payment_remainder(Session, payment_id) == 1
 
-    # The one real payout confirms; everything payable was paid -> paid.
+    # No payout was fair/payable; the dust stays as pending treasury remainder.
     monkeypatch.setattr(recon_mod, "BTCPayClient", ReconCompleted)
     async with Session() as s:
         tenant = (await s.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
@@ -160,7 +168,8 @@ async def test_lnbits_zero_sat_split_not_marked_completed(Session):
     states = await _split_states(Session, payment_id)
     completed = [amt for amt, st in states if st == "completed"]
     skipped = [amt for amt, st in states if st == "skipped"]
-    assert sorted(completed) == [1], f"only the 1-sat split should be completed: {states}"
-    assert len(skipped) == 4 and all(amt == 0 for amt in skipped), states
+    assert completed == []
+    assert len(skipped) == 5 and all(amt == 0 for amt in skipped), states
+    assert await _payment_remainder(Session, payment_id) == 1
 
     assert await _payment_status(Session, payment_id) == "paid"

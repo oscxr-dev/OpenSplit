@@ -8,9 +8,12 @@ interface DialogProps {
   title?: string;
   children: ReactNode;
   className?: string;
+  /** Opt in to a clean LIGHT surface when the app is in light mode (see the
+   *  .os-modal-light rules in globals.css). Default keeps the always-dark modal. */
+  adaptive?: boolean;
 }
 
-export function Dialog({ open, onClose, title, children, className }: DialogProps) {
+export function Dialog({ open, onClose, title, children, className, adaptive = false }: DialogProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -37,8 +40,9 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
     <dialog
       ref={dialogRef}
       className={cn(
-        'w-[calc(100%-1.5rem)] max-w-lg rounded-3xl border border-white/10 bg-[#17141f]/95 p-0 text-white shadow-[0_30px_100px_rgba(0,0,0,0.65),inset_0_1px_0_rgba(255,255,255,0.08)] backdrop:bg-black/55 backdrop:backdrop-blur-xl',
+        'os-modal fixed inset-0 m-auto max-h-[calc(100dvh-2rem)] w-[calc(100%-1.5rem)] max-w-lg overflow-y-auto rounded-3xl border border-white/[0.16] bg-[#1b1825] p-0 text-white shadow-[0_30px_110px_rgba(0,0,0,0.78),inset_0_1px_0_rgba(255,255,255,0.12)] backdrop:bg-black/80 backdrop:backdrop-blur-md',
         'open:animate-in open:fade-in open:zoom-in-95',
+        adaptive && 'os-modal-light',
         className
       )}
       onClick={(e) => {
@@ -47,11 +51,11 @@ export function Dialog({ open, onClose, title, children, className }: DialogProp
     >
       <div className="p-5 sm:p-6">
         {title && (
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white/90">{title}</h2>
+          <div className="mb-5 flex items-center justify-between gap-4">
+            <h2 className="text-lg font-semibold tracking-tight text-white">{title}</h2>
             <button
               onClick={onClose}
-              className="rounded-lg p-1.5 text-white/35 transition-colors hover:bg-white/10 hover:text-white"
+              className="rounded-lg p-1.5 text-white/55 transition-colors hover:bg-white/10 hover:text-white"
             >
               <X className="w-5 h-5" />
             </button>

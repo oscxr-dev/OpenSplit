@@ -1,63 +1,67 @@
-import { Link, NavLink } from 'react-router-dom';
-import { Globe2, ReceiptText, Settings, Users } from 'lucide-react';
-import { BrandMark } from '@/components/brand/BrandMark';
-import { useAuth } from '@/hooks/useAuth';
+import { NavLink } from 'react-router-dom';
+import { Globe2, Settings, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+// mempool.space-style nav item: the active state is a full-height rectangular
+// block (square corners, no border/pill) in electric pink, integrated into the
+// navbar. Inactive items are plain text with a subtle hover fill.
+const navItemClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    'inline-flex h-full min-h-9 items-center gap-2 px-5 text-sm font-medium transition-colors',
+    isActive
+      ? 'bg-[#FF2D78] text-[#FFFFFF] hover:bg-[#FF2D78] hover:text-[#FFFFFF] focus-visible:bg-[#FF2D78] focus-visible:text-[#FFFFFF]'
+      : 'text-[#94A3B8] hover:bg-transparent hover:text-[#FF2D78]'
+  );
+
+const mobileNavItemClass = ({ isActive }: { isActive: boolean }) =>
+  cn(
+    'inline-flex min-h-[58px] flex-1 flex-col items-center justify-center gap-1 rounded-2xl text-[11px] font-semibold transition-colors',
+    isActive
+      ? 'bg-[#FF2D78] text-white hover:bg-[#FF2D78] hover:text-white'
+      : 'text-[#94A3B8] hover:bg-white/[0.05] hover:text-[#F5F5F7]'
+  );
 
 const navItems = [
   { to: '/team', label: 'Team', icon: Users },
-  { to: '/payments', label: 'Payments', icon: ReceiptText },
+  { to: '/public', label: 'Public teams', icon: Globe2 },
   { to: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export function TopBar() {
-  const { tenant } = useAuth();
-  const workspaceName = tenant?.tenant.brand_display_name || tenant?.tenant.name || 'OpenSplit';
-  const publicSlug = tenant?.tenant.public_slug || workspaceName
-    .toLowerCase()
-    .trim()
-    .replace(/['’]/g, '')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-
   return (
-    <header className="fixed inset-x-0 top-0 z-[60] border-b border-white/[0.06] bg-[#0A0B12]">
-      <div className="mx-auto flex min-h-[60px] max-w-[1480px] flex-col gap-1.5 px-4 py-1.5 sm:px-6 lg:min-h-[58px] lg:flex-row lg:items-center lg:justify-between lg:px-8">
-        <div className="flex min-w-0 items-center justify-between gap-4 lg:justify-start">
-          <div className="flex items-center gap-2.5">
-            <BrandMark size="xs" />
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-white">OpenSplit</p>
-            </div>
-          </div>
-        </div>
+    <>
+      <header className="fixed inset-x-0 top-0 z-[60] border-b border-white/[0.06] bg-[#0A0B12]">
+        <div className="relative mx-auto flex min-h-[58px] max-w-[1480px] items-center justify-center px-4 sm:px-6 md:h-16 md:justify-start md:px-8">
+          {/* Left: brand — OpenSplit wordmark, vertically centered, never cropped/stretched */}
+          <img
+            src="/brand/OpenSplit-navbar.svg"
+            alt="OpenSplit"
+            className="opensplit-wordmark h-8 w-[180px] shrink-0 object-contain object-center md:h-10 md:w-[240px] md:object-left"
+          />
 
-        <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 lg:mx-0 lg:flex-1 lg:justify-center">
+          {/* Desktop/tablet nav: centered as one group. */}
+          <nav className="os-top-nav absolute inset-y-0 left-1/2 hidden -translate-x-1/2 items-stretch md:flex">
+            {navItems.map((item) => (
+              <NavLink key={item.to} to={item.to} className={navItemClass}>
+                <item.icon className="h-4 w-4" strokeWidth={1.8} />
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        </div>
+      </header>
+
+      {/* Mobile nav: app-style bottom bar. */}
+      <nav className="os-mobile-nav fixed inset-x-0 bottom-0 z-[70] border-t border-white/[0.08] bg-[#0A0B12]/95 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] pt-2 shadow-[0_-18px_50px_rgba(0,0,0,0.32)] backdrop-blur-xl md:hidden">
+        <div className="mx-auto flex max-w-md items-center gap-2 rounded-[1.35rem] border border-white/[0.08] bg-[#11131F] p-1.5">
           {navItems.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                cn(
-                  'inline-flex min-h-8 shrink-0 items-center gap-2 rounded-md px-2.5 text-sm font-medium text-[#94A3B8] transition hover:bg-white/[0.05] hover:text-[#F5F5F7]',
-                  isActive && 'border border-[#FF2D78]/18 bg-[#FF2D78]/10 text-[#F5F5F7]'
-                )
-              }
-            >
-              <item.icon className="h-4 w-4" strokeWidth={1.8} />
-              {item.label}
+            <NavLink key={item.to} to={item.to} className={mobileNavItemClass}>
+              <item.icon className="h-5 w-5" strokeWidth={1.9} />
+              <span>{item.label}</span>
             </NavLink>
           ))}
-        </nav>
-
-        <Link
-          to={`/public/${publicSlug}`}
-          className="hidden min-h-8 items-center justify-center gap-2 rounded-md border border-white/[0.08] bg-white/[0.03] px-3 text-sm font-semibold text-[#F5F5F7] transition hover:border-white/[0.14] hover:bg-white/[0.06] lg:inline-flex"
-        >
-          <Globe2 className="h-4 w-4 text-[#6B7280]" strokeWidth={1.8} />
-          Public teams
-        </Link>
-      </div>
-    </header>
+        </div>
+      </nav>
+    </>
   );
 }

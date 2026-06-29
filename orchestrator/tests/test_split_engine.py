@@ -9,7 +9,7 @@ from decimal import Decimal, ROUND_DOWN
 import pytest
 from hypothesis import given, settings, strategies as st
 
-from app.services.split_engine import calculate_splits
+from app.services.split_engine import calculate_split_allocation, calculate_splits
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -52,10 +52,31 @@ def test_p5_regression_12345_sats():
 def test_exact_division_no_remainder():
     """When amount divides cleanly, no remainder correction needed."""
     targets = make_targets([50, 25, 25])
-    splits = calculate_splits(10000, targets)
-    amounts = [s for _, s in splits]
+    allocation = calculate_split_allocation(10000, targets)
+    amounts = [s for _, s in allocation.splits]
     assert amounts == [5000, 2500, 2500]
     assert sum(amounts) == 10000
+    assert allocation.unallocated_store_sats == 0
+    assert allocation.pending_remainder_sats == 0
+
+
+def test_101_sats_50_50_largest_remainder_tie_by_order():
+    """101 sats at 50/50 floors to 50/50; the extra sat goes to lower order."""
+    targets = make_targets([50, 50])
+    allocation = calculate_split_allocation(101, targets)
+    amounts = [s for _, s in allocation.splits]
+    assert amounts == [51, 50]
+    assert sum(amounts) == 101
+    assert allocation.pending_remainder_sats == 0
+
+
+def test_100_sats_33_33_34():
+    targets = make_targets([33, 33, 34])
+    allocation = calculate_split_allocation(100, targets)
+    amounts = [s for _, s in allocation.splits]
+    assert amounts == [33, 33, 34]
+    assert sum(amounts) == 100
+    assert allocation.pending_remainder_sats == 0
 
 
 def test_single_target():
@@ -68,12 +89,25 @@ def test_single_target():
 
 
 def test_tiny_amount():
-    """1 sat with multiple targets — only first gets it."""
+    """1 sat with multiple targets is too small to pay only one winner."""
     targets = make_targets([50, 30, 20])
-    splits = calculate_splits(1, targets)
-    amounts = [s for _, s in splits]
-    assert sum(amounts) == 1
-    assert amounts[0] == 1  # T0 (50% = 0.5, largest fraction)
+    allocation = calculate_split_allocation(1, targets)
+    amounts = [s for _, s in allocation.splits]
+    assert amounts == [0, 0, 0]
+    assert sum(amounts) == 0
+    assert allocation.pending_remainder_sats == 1
+
+
+def test_one_sat_across_three_targets_no_fractional_sats():
+    """For a 100% rule, 1 sat across 3 targets stays pending."""
+    targets = make_targets([33.33, 33.33, 33.34])
+    allocation = calculate_split_allocation(1, targets)
+    amounts = [s for _, s in allocation.splits]
+    assert amounts == [0, 0, 0]
+    assert sum(amounts) == 0
+    assert allocation.unallocated_store_sats == 0
+    assert allocation.pending_remainder_sats == 1
+    assert all(isinstance(amount, int) for amount in amounts)
 
 
 def test_all_targets_equal():
@@ -91,9 +125,11 @@ def test_five_targets_various_amounts():
     """Broad test: 5 targets, various amounts."""
     targets = make_targets([30, 35, 15, 10, 10])
     for amount in [1, 2, 5, 10, 100, 1000, 9999, 12345, 1_000_000]:
-        splits = calculate_splits(amount, targets)
-        amounts = [s for _, s in splits]
-        assert sum(amounts) == amount, f"Failed for {amount}: sum={sum(amounts)}"
+        allocation = calculate_split_allocation(amount, targets)
+        amounts = [s for _, s in allocation.splits]
+        assert sum(amounts) + allocation.pending_remainder_sats == amount, (
+            f"Failed for {amount}: splits={amounts} pending={allocation.pending_remainder_sats}"
+        )
         assert all(a >= 0 for a in amounts)
         assert len(amounts) == 5
 
@@ -111,10 +147,85 @@ def test_negative_amount_raises():
         calculate_splits(-100, targets)
 
 
-def test_percentages_not_100_raises():
-    targets = make_targets([30, 30, 30])  # 90%
+def test_percentages_over_100_raises():
+    targets = make_targets([60, 60])  # 120%
     with pytest.raises(ValueError):
         calculate_splits(1000, targets)
+
+
+def test_zero_total_raises():
+    targets = make_targets([0])
+    with pytest.raises(ValueError):
+        calculate_splits(1000, targets)
+
+
+def test_partial_split_allocates_only_configured_share():
+    """A rule totalling < 100% pays out only the configured share; the rest
+    (the unallocated remainder) stays in the store and is not distributed."""
+    targets = make_targets([20, 20, 20])  # 60% total
+    allocation = calculate_split_allocation(100, targets)
+    amounts = [amt for _, amt in allocation.splits]
+    assert amounts == [20, 20, 20]
+    assert sum(amounts) == 60  # only 60% allocated
+    assert allocation.unallocated_store_sats == 40  # 40% stays in store
+    assert allocation.pending_remainder_sats == 0
+
+
+def test_partial_split_with_rounding_stays_within_allocation():
+    """With awkward percentages the allocated sats never exceed amount*total/100."""
+    targets = make_targets([10, 10, 10])  # 30% total
+    allocation = calculate_split_allocation(1007, targets)
+    amounts = [amt for _, amt in allocation.splits]
+    # floor(1007 * 30 / 100) = 302 allocated, distributed across the three targets
+    assert sum(amounts) == 302
+    assert allocation.unallocated_store_sats == 704
+    assert allocation.pending_remainder_sats == 1
+    assert all(a >= 0 for a in amounts)
+
+
+def test_one_sat_partial_rule_keeps_indivisible_dust_pending():
+    """If target+store floors cannot consume a whole sat, keep it pending.
+
+    For 1 sat at 60% total allocation, target share is 0.6 sat and store share
+    is 0.4 sat. Neither can honestly receive a fractional sat, so no payout is
+    created and the whole sat is tracked as pending remainder.
+    """
+    targets = make_targets([20, 20, 20])
+    allocation = calculate_split_allocation(1, targets)
+    amounts = [amt for _, amt in allocation.splits]
+    assert amounts == [0, 0, 0]
+    assert allocation.allocated_sats == 0
+    assert allocation.unallocated_store_sats == 0
+    assert allocation.pending_remainder_sats == 1
+
+
+def test_tie_breaks_by_target_id_when_order_is_equal():
+    """Equal fractional remainders are deterministic even if order collides."""
+    targets = [
+        FakeTarget(
+            id=uuid.UUID("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+            label="High id",
+            percentage=50,
+            order=0,
+        ),
+        FakeTarget(
+            id=uuid.UUID("00000000-0000-0000-0000-000000000001"),
+            label="Low id",
+            percentage=50,
+            order=0,
+        ),
+    ]
+    allocation = calculate_split_allocation(101, targets)
+    amounts = [amt for _, amt in allocation.splits]
+    assert amounts == [50, 51]
+
+
+def test_split_amounts_are_always_integer_sats():
+    targets = make_targets([12.5, 12.5, 25, 50])
+    allocation = calculate_split_allocation(999, targets)
+    amounts = [amt for _, amt in allocation.splits]
+    assert all(isinstance(amount, int) for amount in amounts)
+    assert all(amount >= 0 for amount in amounts)
 
 
 # ── Property-Based Tests ─────────────────────────────────────────────
@@ -135,11 +246,11 @@ def valid_targets(draw):
 @given(amount=st.integers(min_value=1, max_value=10_000_000), targets=valid_targets())
 @settings(max_examples=500)
 def test_property_sum_equals_amount(amount, targets):
-    """For ANY amount and ANY valid percentage set, splits sum to amount."""
-    splits = calculate_splits(amount, targets)
-    amounts = [s for _, s in splits]
-    assert sum(amounts) == amount, (
-        f"amount={amount} splits={amounts} sum={sum(amounts)} "
+    """For 100% rules, splits plus pending remainder sum to amount."""
+    allocation = calculate_split_allocation(amount, targets)
+    amounts = [s for _, s in allocation.splits]
+    assert sum(amounts) + allocation.pending_remainder_sats == amount, (
+        f"amount={amount} splits={amounts} pending={allocation.pending_remainder_sats} "
         f"pcts={[t.percentage for t in targets]}"
     )
 
@@ -168,8 +279,12 @@ def test_property_same_length(amount, targets):
 @settings(max_examples=500)
 def test_property_remainder_correct(amount, targets):
     """Each split is floor(amount * pct / 100) plus at most 1 extra sat."""
-    splits = calculate_splits(amount, targets)
-    for (target, s), t in zip(splits, targets):
+    allocation = calculate_split_allocation(amount, targets)
+    if allocation.allocated_sats == 0 and allocation.pending_remainder_sats > 0:
+        assert all(s == 0 for _, s in allocation.splits)
+        return
+
+    for (target, s), t in zip(allocation.splits, targets):
         exact = Decimal(amount) * Decimal(str(t.percentage)) / Decimal("100")
         floor = int(exact.to_integral_value(rounding=ROUND_DOWN))
         assert s in (floor, floor + 1), (

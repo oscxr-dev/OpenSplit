@@ -1,11 +1,18 @@
 import { Building2 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { formatDateShort, formatSats } from '@/lib/utils';
-import type { Member } from '@/types/api';
+import type { Member, SplitRule } from '@/types/api';
 
 interface TeamMapProps {
   members: Member[];
   workspaceName: string;
+  /** When provided, the graph renders THIS rule's targets (enriched with payout
+   *  stats from `members`, matched by label). Switching tabs in MembersPage swaps
+   *  selectedRule, which swaps the rule shown in the graph. */
+  selectedRule?: SplitRule | null;
+  /** Optional content rendered between the summary card and the graph card —
+   *  used to attach the active-rule tabs to the top border of the graph. */
+  tabsSlot?: ReactNode;
 }
 
 type MapSelection = { type: 'team' } | { type: 'member'; index: number };
@@ -55,13 +62,37 @@ function memberStatus(member: Member) {
   return 'Active';
 }
 
-export function TeamMap({ members, workspaceName }: TeamMapProps) {
+export function TeamMap({ members, workspaceName, selectedRule, tabsSlot }: TeamMapProps) {
   const [selection, setSelection] = useState<MapSelection>({ type: 'member', index: 0 });
   const [centerBlinking, setCenterBlinking] = useState(false);
-  const visibleMembers = useMemo(
-    () => members.filter((member) => (member.current_percentage ?? 0) > 0),
-    [members]
-  );
+  // The graph renders the selected rule's targets, enriched with payout stats
+  // from the members feed (matched by label). Falls back to the raw members list
+  // when no rule is provided.
+  const visibleMembers = useMemo<Member[]>(() => {
+    if (selectedRule) {
+      const statsByLabel = new Map(members.map((member) => [member.label, member]));
+      return selectedRule.targets
+        .filter((target) => target.percentage > 0)
+        .slice()
+        .sort((a, b) => a.order - b.order)
+        .map((target) => {
+          const stats = statsByLabel.get(target.label);
+          return {
+            label: target.label,
+            ln_address: target.ln_address ?? stats?.ln_address ?? null,
+            nostr_pubkey: stats?.nostr_pubkey ?? null,
+            current_percentage: target.percentage,
+            total_paid_sats: stats?.total_paid_sats ?? 0,
+            payment_count: stats?.payment_count ?? 0,
+            last_payment_at: stats?.last_payment_at ?? null,
+            failed_count: stats?.failed_count ?? 0,
+            target_count: stats?.target_count ?? 1,
+            collision: stats?.collision ?? false,
+          };
+        });
+    }
+    return members.filter((member) => (member.current_percentage ?? 0) > 0);
+  }, [selectedRule, members]);
   const normalizedSelectedIndex = selection.type === 'member' && visibleMembers[selection.index] ? selection.index : 0;
   const selectedMember = selection.type === 'member' ? visibleMembers[normalizedSelectedIndex] : undefined;
   const teamSelected = selection.type === 'team';
@@ -133,7 +164,12 @@ export function TeamMap({ members, workspaceName }: TeamMapProps) {
         </div>
       )}
 
-      <div
+      {/* Tabs + graph share one container so the tabs attach flush to the graph
+          card's top border (no space-y gap between them). */}
+      <div className="relative">
+        {tabsSlot}
+
+        <div
         className="relative min-h-[540px] overflow-hidden rounded-lg border border-[#2A2D3A] bg-[#11121A] p-4 shadow-[inset_0_1px_0_rgba(245,245,247,0.055),0_24px_70px_rgba(0,0,0,0.28)] sm:min-h-[620px] sm:p-6 lg:min-h-[700px] lg:p-10"
         style={{
           background:
@@ -222,6 +258,7 @@ export function TeamMap({ members, workspaceName }: TeamMapProps) {
             </button>
           );
         })}
+        </div>
       </div>
     </section>
   );
