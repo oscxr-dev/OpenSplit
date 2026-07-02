@@ -241,7 +241,15 @@ export function SettingsPage() {
                 <h2 className="text-xl font-semibold text-[#F5F5F7]">BTCPay</h2>
               </div>
               <p className="mt-3 text-sm text-[#94A3B8]">{workspaceName}</p>
-              <p className="mt-2 font-mono text-xs text-[#94A3B8]">{tenant?.tenant.id ?? 'workspace pending'}</p>
+              {/* Privacy: the tenant UUID stays collapsed by default — only shown on demand. */}
+              <details className="mt-2">
+                <summary className="cursor-pointer select-none text-xs font-medium text-[#94A3B8] transition hover:text-[#F5F5F7]">
+                  Advanced
+                </summary>
+                <p className="mt-1 font-mono text-xs text-[#94A3B8]">
+                  Workspace ID: {tenant?.tenant.id ?? 'workspace pending'}
+                </p>
+              </details>
             </div>
             <div className="px-6 pb-6 sm:px-8 lg:p-8">
               <Badge variant={connected ? 'success' : 'error'}>{connected ? 'Connected' : 'Disconnected'}</Badge>

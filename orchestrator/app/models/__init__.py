@@ -39,7 +39,8 @@ class Tenant(Base):
     # Public transparency (opt-in). Slug is the public URL key; disabled by default.
     public_slug: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     public_transparency_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    public_show_amounts: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Privacy P1: amounts are private by default; tenants must explicitly opt in.
+    public_show_amounts: Mapped[bool] = mapped_column(Boolean, default=False)
     # Optional coarse public location for the Public Teams map (country/city level
     # only — never a precise address or coordinates). NULL => "Unknown location".
     public_country: Mapped[str | None] = mapped_column(String(80), nullable=True)
