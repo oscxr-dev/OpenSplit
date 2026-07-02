@@ -59,7 +59,7 @@ async def _seed_tenant_rule(Session) -> tuple[uuid.UUID, uuid.UUID]:
             btcpay_url="https://btcpay.test",
             btcpay_api_key="test-key",
             btcpay_store_id="store-1",
-            btcpay_webhook_secret=None,  # skip signature verification
+            btcpay_webhook_secret="test-webhook-secret",  # required; sig check is faked below
             active=True,
         )
         rule = SplitRule(tenant_id=tenant_id, name="Default", active=True, version=1)
