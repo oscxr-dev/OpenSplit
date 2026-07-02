@@ -239,6 +239,7 @@ async def update_split(
         tenant_id=tenant.id,
         name=body.name or rule.name,
         active=rule.active,
+        public_enabled=rule.public_enabled,
         version=rule.version + 1,
         parent_rule_id=rule.id,
     )
@@ -266,6 +267,10 @@ async def update_split(
 
     if rule.active:
         rule.active = False
+    # Public visibility follows the lineage: the edited version supersedes the
+    # old one on /public/{slug}, so the old version must stop being public.
+    if rule.public_enabled:
+        rule.public_enabled = False
 
     await session.commit()
     return await _build_response(new_rule, session)
