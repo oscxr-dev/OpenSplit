@@ -51,6 +51,20 @@ class Tenant(Base):
     users: Mapped[list[User]] = relationship("User", back_populates="tenant", lazy="selectin")
     split_rules: Mapped[list[SplitRule]] = relationship("SplitRule", back_populates="tenant", lazy="selectin")
 
+    # Redaction contract: the raw btcpay_api_key / btcpay_webhook_secret must
+    # never be serialized. API responses only carry these presence indicators.
+    @property
+    def btcpay_api_key_set(self) -> bool:
+        return bool(self.btcpay_api_key)
+
+    @property
+    def btcpay_api_key_last4(self) -> str | None:
+        # Reveal a suffix only when the key is long enough that four characters
+        # stay meaningless on their own (guards short dev/test keys).
+        if self.btcpay_api_key and len(self.btcpay_api_key) >= 8:
+            return self.btcpay_api_key[-4:]
+        return None
+
 
 # ---------------------------------------------------------------------------
 # User
@@ -74,6 +88,16 @@ class User(Base):
 # ---------------------------------------------------------------------------
 class SplitRule(Base):
     __tablename__ = "split_rules"
+    # Exactly one active processing rule per tenant: partial unique index over
+    # active rows only. Inactive rules (history, drafts) are unlimited.
+    __table_args__ = (
+        Index(
+            "uq_split_rules_one_active_per_tenant",
+            "tenant_id",
+            unique=True,
+            postgresql_where=text("active"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)

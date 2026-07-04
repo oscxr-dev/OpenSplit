@@ -5,6 +5,7 @@ from decimal import Decimal
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.deps import get_current_tenant, get_current_user
@@ -235,22 +236,36 @@ async def update_split(
         .order_by(SplitTarget.order)
     )
     source_targets = list(source_targets_result.scalars().all())
+
+    targets = body.targets
+    if targets is not None:
+        _validate_target_destinations(targets, tenant)
+    targets_to_write = targets if targets is not None else source_targets
+
+    # The successor inherits the active/public flags and the old version loses
+    # them. Hand over active BEFORE inserting the successor: the partial unique
+    # index uq_split_rules_one_active_per_tenant checks each INSERT immediately,
+    # so two rows of the lineage must never be active at the same time.
+    was_active = rule.active
+    was_public = rule.public_enabled
+    if rule.active:
+        rule.active = False
+    # Public visibility follows the lineage: the edited version supersedes the
+    # old one on /public/{slug}, so the old version must stop being public.
+    if rule.public_enabled:
+        rule.public_enabled = False
+    await session.flush()
+
     new_rule = SplitRule(
         tenant_id=tenant.id,
         name=body.name or rule.name,
-        active=rule.active,
-        public_enabled=rule.public_enabled,
+        active=was_active,
+        public_enabled=was_public,
         version=rule.version + 1,
         parent_rule_id=rule.id,
     )
     session.add(new_rule)
     await session.flush()
-
-    targets = body.targets
-    if targets is not None:
-        _validate_target_destinations(targets, tenant)
-
-    targets_to_write = targets if targets is not None else source_targets
 
     for i, target in enumerate(targets_to_write):
         session.add(
@@ -264,13 +279,6 @@ async def update_split(
                 order=target.order if target.order is not None else i,
             )
         )
-
-    if rule.active:
-        rule.active = False
-    # Public visibility follows the lineage: the edited version supersedes the
-    # old one on /public/{slug}, so the old version must stop being public.
-    if rule.public_enabled:
-        rule.public_enabled = False
 
     await session.commit()
     return await _build_response(new_rule, session)
@@ -325,18 +333,37 @@ async def activate_split(
             ),
         )
 
-    # Multiple rules may be active at once (each surfaces as a board tab). We do
-    # NOT deactivate the others here. Within a single lineage the supersede guard
-    # above still prevents an older version from re-activating while a newer one
-    # is active; different rules can be active side by side.
+    # Exactly one processing rule per tenant (DB-enforced by the partial unique
+    # index uq_split_rules_one_active_per_tenant): activating this rule
+    # atomically deactivates whichever rule was active before. The bulk UPDATE
+    # re-evaluates its WHERE under READ COMMITTED, so a concurrent activation is
+    # either deactivated here or rejected by the index at commit.
+    replaced_rule_ids = [str(r.id) for r in active_rules if r.id != rule.id]
+    await session.execute(
+        update(SplitRule)
+        .where(
+            SplitRule.tenant_id == tenant.id,
+            SplitRule.active == True,  # noqa: E712
+            SplitRule.id != rule.id,
+        )
+        .values(active=False)
+    )
     rule.active = True
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Another split rule was activated at the same time. Refresh and retry.",
+        )
     logger.info(
         "split_activated",
         tenant_id=str(tenant.id),
         rule_id=str(rule.id),
         version=rule.version,
         name=rule.name,
+        replaced_rule_ids=replaced_rule_ids,
     )
     return await _build_response(rule, session)
 

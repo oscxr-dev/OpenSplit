@@ -177,7 +177,9 @@ async def test_multiple_public_rules_are_explicitly_listed(Session):
         rules = [
             SplitRule(tenant_id=tenant.id, name="Carol Dave", active=False, public_enabled=True, version=1),
             SplitRule(tenant_id=tenant.id, name="Team Ops", active=True, public_enabled=True, version=2),
-            SplitRule(tenant_id=tenant.id, name="Private", active=True, public_enabled=False, version=3),
+            # active=False: only one rule may be active per tenant (DB-enforced);
+            # public visibility is what this test exercises, not active routing.
+            SplitRule(tenant_id=tenant.id, name="Private", active=False, public_enabled=False, version=3),
         ]
         s.add_all(rules)
         await s.flush()
