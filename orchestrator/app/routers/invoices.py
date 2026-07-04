@@ -25,6 +25,7 @@ def _payment_to_response(payment: Payment) -> InvoiceResponse:
                 label=s.split_target.label if s.split_target else None,
                 amount_sats=s.amount_sats,
                 status=s.status,
+                btcpay_payout_state=s.btcpay_payout_state,
                 executed_at=s.executed_at or datetime.min,
             )
             for s in payment.splits

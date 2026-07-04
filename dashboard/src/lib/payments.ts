@@ -1,4 +1,48 @@
 import type { Invoice } from '@/types/api';
+import { payoutStatusLabel } from '@/lib/utils';
+import { toBrowserUrl } from '@/lib/browserUrl';
+
+/** Raw BTCPay payout states meaning "BTCPay is holding this payout" — it needs
+ *  a manual send or a Lightning payout processor before it can settle. */
+const WAITING_BTCPAY_STATES = ['AwaitingApproval', 'AwaitingPayment'];
+
+/** One-line operator hint shown next to a "Waiting in BTCPay" payout. */
+export const WAITING_IN_BTCPAY_HINT =
+  'Send it manually in BTCPay or enable a Lightning payout processor';
+
+/** True when a split is mapped to in_progress but BTCPay's raw state shows it
+ *  is parked awaiting approval/payment — i.e. stuck until the operator acts. */
+export function isWaitingInBtcpay(split: {
+  status: string;
+  btcpay_payout_state?: string | null;
+}): boolean {
+  return (
+    split.status === 'in_progress' &&
+    !!split.btcpay_payout_state &&
+    WAITING_BTCPAY_STATES.includes(split.btcpay_payout_state)
+  );
+}
+
+/** Human status for one split: "Waiting in BTCPay" when parked in BTCPay,
+ *  otherwise the normal payout status label. */
+export function splitStatusLabel(split: {
+  status: string;
+  btcpay_payout_state?: string | null;
+}): string {
+  return isWaitingInBtcpay(split) ? 'Waiting in BTCPay' : payoutStatusLabel(split.status);
+}
+
+/** Browser-openable link to a store's BTCPay payouts screen (host.docker.internal
+ *  rewritten), or null when the BTCPay connection isn't configured. */
+export function btcpayPayoutsUrl(
+  btcpayUrl: string | null | undefined,
+  storeId: string | null | undefined,
+  browserHostname: string
+): string | null {
+  if (!btcpayUrl || !storeId) return null;
+  const base = btcpayUrl.replace(/\/+$/, '');
+  return toBrowserUrl(`${base}/stores/${storeId}/payouts`, browserHostname);
+}
 
 /** Roll a payment's per-split statuses up into a single payout status. */
 export function paymentPayoutStatus(payment: Invoice): string {
@@ -10,6 +54,16 @@ export function paymentPayoutStatus(payment: Invoice): string {
     return 'completed';
   }
   return payment.status;
+}
+
+/** True when a payment is mapped in_progress but at least one split is parked
+ *  awaiting action in BTCPay — surfaced so the row reads "Waiting in BTCPay"
+ *  instead of a bare "In progress". */
+export function paymentIsWaitingInBtcpay(payment: Invoice): boolean {
+  return (
+    paymentPayoutStatus(payment) === 'in_progress' &&
+    payment.splits.some((split) => isWaitingInBtcpay(split))
+  );
 }
 
 export function completedSummary(payment: Invoice): string {

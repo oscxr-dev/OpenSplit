@@ -65,6 +65,9 @@ async def reconcile_tenant_payouts(session: AsyncSession, tenant: Tenant) -> int
             try:
                 payout = await client.get_payout(split.btcpay_payout_id or "")
                 state = payout.get("state")
+                # Persist BTCPay's raw state verbatim on every check (column is
+                # String(32)); mapping/retry/approval behavior is untouched.
+                split.btcpay_payout_state = str(state)[:32] if state is not None else None
                 next_status = map_btcpay_payout_state(state)
                 if next_status != split.status:
                     changed += 1

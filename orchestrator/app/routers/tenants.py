@@ -1,27 +1,43 @@
 from __future__ import annotations
 
 import secrets
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.core.deps import get_current_tenant, get_current_user
 from app.database import get_session
-from app.models import Tenant, User
+from app.models import Payment, PaymentSplit, SplitRule, Tenant, User
 from app.schemas import (
     BTCPayAuthorizeUrl,
     BTCPayConnectionTest,
     BTCPayWebhookSecret,
     TenantHealth,
     TenantResponse,
+    TenantStatusActiveRule,
+    TenantStatusResponse,
     TenantUpdate,
 )
 from app.services.btcpay_client import BTCPayClient
 from app.services.lnbits_client import LNBitsClient
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
+
+# Raw BTCPay payout states that mean "BTCPay is holding this payout and needs a
+# manual send or a payout processor" — the pipeline can't clear them on its own.
+WAITING_BTCPAY_STATES = {"AwaitingApproval", "AwaitingPayment"}
+# A waiting payout is only surfaced once it has sat this long; younger ones are
+# still normal in-flight delivery.
+WAITING_IN_BTCPAY_THRESHOLD = timedelta(minutes=3)
+# A failed split counts toward "failing" only if it failed within this window.
+RECENT_FAILURE_WINDOW = timedelta(hours=24)
+# Split statuses that need no further delivery work.
+_TERMINAL_SPLIT_STATUSES = {"completed", "failed", "cancelled"}
 
 # Minimal BTCPay Greenfield permissions OpenSplit actually uses
 # (see services/btcpay_client.py):
@@ -241,4 +257,147 @@ async def get_btcpay_authorize_url(
     return BTCPayAuthorizeUrl(
         authorize_url=f"{tenant.btcpay_url}/api-keys/authorize?{query}",
         permissions=list(BTCPAY_MINIMAL_PERMISSIONS),
+    )
+
+
+# ── Aggregate pipeline status (read-only) ──────────────────────────────────
+
+
+@dataclass
+class SplitDeliveryFact:
+    """The only per-split fields the payout_delivery check needs. Timestamps are
+    timezone-aware (columns are DateTime(timezone=True))."""
+
+    status: str
+    btcpay_payout_state: str | None
+    executed_at: datetime | None
+    updated_at: datetime | None
+
+
+def compute_store_status(*, configured: bool, reachable: bool | None) -> str:
+    """"not_configured" until all three BTCPay creds are set, then the probe
+    result. ``reachable`` is only consulted when configured."""
+    if not configured:
+        return "not_configured"
+    return "ok" if reachable else "unreachable"
+
+
+def compute_webhook_status(*, secret_set: bool, last_webhook_at: datetime | None) -> str:
+    """"not_configured" with no secret, "waiting" until the first signature-valid
+    delivery lands, "verified" once one has."""
+    if not secret_set:
+        return "not_configured"
+    return "verified" if last_webhook_at is not None else "waiting"
+
+
+def compute_payout_delivery(facts: list[SplitDeliveryFact], now: datetime) -> str:
+    """Roll every split's delivery state into one label. Precedence, most urgent
+    first: a recent failure ("failing") outranks a payout stuck in BTCPay
+    ("waiting_in_btcpay"), which outranks normal in-flight delivery
+    ("delivering"); nothing outstanding is "idle"."""
+    if any(
+        fact.status == "failed"
+        and fact.updated_at is not None
+        and now - fact.updated_at <= RECENT_FAILURE_WINDOW
+        for fact in facts
+    ):
+        return "failing"
+
+    non_terminal = [fact for fact in facts if fact.status not in _TERMINAL_SPLIT_STATUSES]
+    if any(
+        fact.btcpay_payout_state in WAITING_BTCPAY_STATES
+        and fact.executed_at is not None
+        and now - fact.executed_at > WAITING_IN_BTCPAY_THRESHOLD
+        for fact in non_terminal
+    ):
+        return "waiting_in_btcpay"
+
+    if non_terminal:
+        return "delivering"
+    return "idle"
+
+
+@router.get("/me/status", response_model=TenantStatusResponse)
+async def get_tenant_status(
+    current_user: User = Depends(get_current_user),
+    tenant: Tenant = Depends(get_current_tenant),
+    session: AsyncSession = Depends(get_session),
+) -> TenantStatusResponse:
+    """One-call health snapshot for the dashboard status strip. Read-only:
+    reuses the existing BTCPay probe and never writes."""
+    now = datetime.now(timezone.utc)
+
+    store_configured = bool(
+        tenant.btcpay_url and tenant.btcpay_api_key and tenant.btcpay_store_id
+    )
+    reachable: bool | None = None
+    if store_configured:
+        client = BTCPayClient(
+            tenant.btcpay_url or "",
+            tenant.btcpay_api_key or "",
+            tenant.btcpay_store_id or "",
+            timeout=BTCPAY_TEST_TIMEOUT_SECONDS,
+        )
+        try:
+            reachable = await client.ping()
+        finally:
+            await client.close()
+
+    # Newest active rule (matches the invoice-creation default: highest version,
+    # then most recently created).
+    active_rule_row = (
+        await session.execute(
+            select(SplitRule.name, SplitRule.version)
+            .where(SplitRule.tenant_id == tenant.id, SplitRule.active.is_(True))
+            .order_by(SplitRule.version.desc(), SplitRule.created_at.desc())
+        )
+    ).first()
+    active_rule = (
+        TenantStatusActiveRule(name=active_rule_row.name, version=active_rule_row.version)
+        if active_rule_row is not None
+        else None
+    )
+
+    # Fetch only the splits the payout_delivery check can care about: everything
+    # still in flight, plus failures recent enough to count.
+    delivery_rows = (
+        await session.execute(
+            select(
+                PaymentSplit.status,
+                PaymentSplit.btcpay_payout_state,
+                PaymentSplit.executed_at,
+                PaymentSplit.updated_at,
+            )
+            .join(Payment, Payment.id == PaymentSplit.payment_id)
+            .where(
+                Payment.tenant_id == tenant.id,
+                or_(
+                    PaymentSplit.status.not_in(_TERMINAL_SPLIT_STATUSES),
+                    and_(
+                        PaymentSplit.status == "failed",
+                        PaymentSplit.updated_at >= now - RECENT_FAILURE_WINDOW,
+                    ),
+                ),
+            )
+        )
+    ).all()
+    facts = [
+        SplitDeliveryFact(
+            status=row.status,
+            btcpay_payout_state=row.btcpay_payout_state,
+            executed_at=row.executed_at,
+            updated_at=row.updated_at,
+        )
+        for row in delivery_rows
+    ]
+
+    return TenantStatusResponse(
+        store=compute_store_status(configured=store_configured, reachable=reachable),
+        webhook=compute_webhook_status(
+            secret_set=bool(tenant.btcpay_webhook_secret),
+            last_webhook_at=tenant.last_webhook_at,
+        ),
+        active_rule=active_rule,
+        payout_delivery=compute_payout_delivery(facts, now),
+        public_page="on" if tenant.public_transparency_enabled else "off",
     )

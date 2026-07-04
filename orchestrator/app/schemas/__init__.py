@@ -169,6 +169,25 @@ class BTCPayAuthorizeUrl(BaseModel):
     permissions: list[str]
 
 
+class TenantStatusActiveRule(BaseModel):
+    name: str
+    version: int
+
+
+class TenantStatusResponse(BaseModel):
+    """Aggregate pipeline health for the dashboard's status strip.
+
+    Read-only snapshot: is the store reachable, is the webhook verified, which
+    rule is active, are payouts flowing, and is the public page on.
+    """
+
+    store: str  # "not_configured" | "unreachable" | "ok"
+    webhook: str  # "not_configured" | "waiting" | "verified"
+    active_rule: TenantStatusActiveRule | None = None
+    payout_delivery: str  # "idle" | "delivering" | "waiting_in_btcpay" | "failing"
+    public_page: str  # "off" | "on"
+
+
 class BTCPayWebhookSecret(BaseModel):
     """One-time reveal of a freshly generated webhook secret.
 
@@ -300,6 +319,9 @@ class PaymentSplitResponse(BaseModel):
     ln_address: str | None = None
     amount_sats: int
     status: str
+    # BTCPay's raw payout state ("AwaitingPayment", ...) from the last
+    # reconciliation check; None until the first check lands.
+    btcpay_payout_state: str | None = None
     payout_id: str | None = None
     failure_reason: str | None = None
     retry_count: int = 0
@@ -386,6 +408,9 @@ class ProofSplitResponse(BaseModel):
     percentage: float | None = None
     amount_sats: int
     payout_status: str
+    # Raw BTCPay payout state from the last reconciliation check (see
+    # PaymentSplitResponse.btcpay_payout_state).
+    btcpay_payout_state: str | None = None
     payout_id: str | None = None  # internal/private endpoint only
 
 

@@ -191,6 +191,10 @@ class PaymentSplit(Base):
     split_target_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("split_targets.id"), nullable=False)
     amount_sats: Mapped[int] = mapped_column(Integer, nullable=False)
     btcpay_payout_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # BTCPay's raw payout state (e.g. "AwaitingPayment"), stored verbatim on
+    # every reconciliation check. Informational only — `status` stays the
+    # single source of truth for money logic.
+    btcpay_payout_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)

@@ -25,6 +25,7 @@ def payment_to_response(payment: Payment) -> InvoiceResponse:
             ln_address=split.split_target.ln_address if split.split_target else None,
             amount_sats=split.amount_sats,
             status=split.status,
+            btcpay_payout_state=split.btcpay_payout_state,
             payout_id=split.btcpay_payout_id,
             failure_reason=split.failure_reason,
             retry_count=split.retry_count,
@@ -178,6 +179,9 @@ async def retry_payment_split(
         split.failure_reason = None
         split.retry_count += 1
         split.last_checked_at = None
+        # The old payout's raw state ("Cancelled") no longer describes the new
+        # payout; cleared until the next reconciliation check reads it.
+        split.btcpay_payout_state = None
         await session.commit()
     except Exception as exc:
         await session.rollback()
@@ -194,6 +198,7 @@ async def retry_payment_split(
         ln_address=split.split_target.ln_address,
         amount_sats=split.amount_sats,
         status=split.status,
+        btcpay_payout_state=split.btcpay_payout_state,
         payout_id=split.btcpay_payout_id,
         failure_reason=split.failure_reason,
         retry_count=split.retry_count,

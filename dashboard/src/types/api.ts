@@ -120,6 +120,9 @@ export interface PaymentSplit {
   ln_address: string | null;
   amount_sats: number;
   status: string;
+  /** BTCPay's raw payout state ("AwaitingPayment", ...) from the last
+   *  reconciliation check; null until the first check lands. */
+  btcpay_payout_state?: string | null;
   payout_id: string | null;
   failure_reason: string | null;
   retry_count: number;
@@ -184,6 +187,8 @@ export interface ProofSplit {
   percentage: number | null;
   amount_sats: number;
   payout_status: string;
+  /** Raw BTCPay payout state from the last reconciliation check. */
+  btcpay_payout_state?: string | null;
   payout_id: string | null;
 }
 
@@ -232,6 +237,15 @@ export interface PublicTransparency {
   distribution: PublicSplitMember[];
   recent_payments: PublicRecentPayment[];
   total_sats: number | null;
+}
+
+// ── Aggregate pipeline status (GET /tenants/me/status) ─────────────────────
+export interface TenantStatus {
+  store: 'not_configured' | 'unreachable' | 'ok';
+  webhook: 'not_configured' | 'waiting' | 'verified';
+  active_rule: { name: string; version: number } | null;
+  payout_delivery: 'idle' | 'delivering' | 'waiting_in_btcpay' | 'failing';
+  public_page: 'off' | 'on';
 }
 
 export interface DashboardSummary {
