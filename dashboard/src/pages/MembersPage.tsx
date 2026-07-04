@@ -78,7 +78,8 @@ export function MembersPage() {
     () => (data ?? []).filter((member) => (member.current_percentage ?? 0) > 0),
     [data]
   );
-  const workspaceName = tenant?.tenant.brand_display_name || tenant?.tenant.name || 'OpenSplit';
+  // Display name comes from tenant.name only — brand_display_name is dormant.
+  const workspaceName = tenant?.tenant.name || 'OpenSplit';
 
   // Active split rules drive the tabs attached to the top of the graph.
   const activeRules = useMemo(() => (splits ?? []).filter((rule) => rule.active), [splits]);

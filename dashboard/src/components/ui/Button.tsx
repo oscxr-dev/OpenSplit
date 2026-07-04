@@ -1,7 +1,7 @@
 import { type ButtonHTMLAttributes, forwardRef } from 'react';
 import { cn } from '@/lib/utils';
 
-type ButtonVariant = 'default' | 'outline' | 'ghost' | 'destructive';
+type ButtonVariant = 'default' | 'primary' | 'outline' | 'ghost' | 'destructive';
 type ButtonSize = 'sm' | 'default' | 'lg';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -12,6 +12,9 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantStyles: Record<ButtonVariant, string> = {
   default: 'border border-white/10 bg-white text-[#18141f] hover:bg-white/90 active:scale-[0.98] shadow-[0_1px_0_rgba(255,255,255,0.35)_inset,0_8px_24px_rgba(0,0,0,0.18)]',
+  // Solid-pink call to action for save/apply buttons: unmistakably enabled
+  // when active, clearly dimmed when disabled (both themes).
+  primary: 'border border-[#FF2D78]/45 bg-[#FF2D78] text-white hover:bg-[#E62469] active:scale-[0.98] shadow-[0_8px_24px_rgba(255,45,120,0.25)] focus:ring-[#FF2D78]/35',
   outline: 'border border-white/10 bg-white/[0.06] text-[#F5F5F7] hover:bg-white/10 active:scale-[0.98]',
   ghost: 'text-[#94A3B8] hover:bg-white/[0.07] hover:text-[#F5F5F7] active:bg-white/10',
   destructive: 'border border-red-300/15 bg-red-500/80 text-white hover:bg-red-500 active:scale-[0.98] shadow-sm',
