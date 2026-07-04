@@ -21,6 +21,12 @@ export interface TenantResponse {
   public_transparency_enabled?: boolean | null;
   public_country?: string | null;
   public_city?: string | null;
+  /** BTCPay connection. The raw API key is never sent by the server — only
+   *  presence indicators (`btcpay_api_key_set` / `btcpay_api_key_last4`). */
+  btcpay_url?: string | null;
+  btcpay_store_id?: string | null;
+  btcpay_api_key_set?: boolean;
+  btcpay_api_key_last4?: string | null;
   active: boolean;
   created_at: string;
 }
@@ -39,7 +45,25 @@ export interface PublicTeamSummary {
 
 export interface TenantHealth {
   tenant: TenantResponse;
+  /** Current adapter connection status ("ok" | "unreachable"). */
+  connection_status: string;
+  /** Legacy alias of connection_status; do not use in new code. */
   lnbits_status: string;
+}
+
+/** Granular result of POST /tenants/me/btcpay/test. `auth_ok` / `store_found`
+ *  are null when an earlier check already failed (never evaluated). */
+export interface BtcPayConnectionTest {
+  url_reachable: boolean;
+  auth_ok: boolean | null;
+  store_found: boolean | null;
+  ok: boolean;
+  detail: string;
+}
+
+export interface BtcPayAuthorizeUrl {
+  authorize_url: string;
+  permissions: string[];
 }
 
 export interface SplitTarget {

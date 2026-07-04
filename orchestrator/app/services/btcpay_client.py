@@ -13,15 +13,18 @@ class BTCPayClient:
     to Lightning addresses via Pull Payments. Keys are per-tenant.
     """
 
-    def __init__(self, base_url: str, api_key: str, store_id: str) -> None:
+    def __init__(
+        self, base_url: str, api_key: str, store_id: str, timeout: float = 20.0
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.store_id = store_id
+        self.timeout = timeout
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:
-            self._client = httpx.AsyncClient(timeout=httpx.Timeout(20.0))
+            self._client = httpx.AsyncClient(timeout=httpx.Timeout(self.timeout))
         return self._client
 
     def _headers(self) -> dict[str, str]:
@@ -160,13 +163,18 @@ class BTCPayClient:
         return r.json()
 
     # ── Health ──────────────────────────────────────────────────────────
+    async def get_store_response(self) -> httpx.Response:
+        """GET the store without raising on HTTP errors — callers inspect the
+        status code to distinguish bad key (401/403) from bad store id (404)."""
+        client = await self._get_client()
+        return await client.get(
+            f"{self.base_url}/api/v1/stores/{self.store_id}",
+            headers=self._headers(),
+        )
+
     async def ping(self) -> bool:
         try:
-            client = await self._get_client()
-            r = await client.get(
-                f"{self.base_url}/api/v1/stores/{self.store_id}",
-                headers=self._headers(),
-            )
+            r = await self.get_store_response()
             return r.status_code == 200
         except Exception:
             return False

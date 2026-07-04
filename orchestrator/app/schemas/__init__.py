@@ -4,6 +4,7 @@ import re
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
@@ -40,6 +41,13 @@ class TenantResponse(BaseModel):
     public_transparency_enabled: bool = False
     public_country: str | None = None
     public_city: str | None = None
+    # BTCPay connection — REDACTION CONTRACT: the raw btcpay_api_key and
+    # btcpay_webhook_secret must NEVER be fields on this (or any) response
+    # schema. Only presence indicators leave the server.
+    btcpay_url: str | None = None
+    btcpay_store_id: str | None = None
+    btcpay_api_key_set: bool = False
+    btcpay_api_key_last4: str | None = None
     active: bool
     created_at: datetime
 
@@ -60,6 +68,52 @@ class TenantUpdate(BaseModel):
     public_transparency_enabled: bool | None = None
     public_country: str | None = None
     public_city: str | None = None
+    btcpay_url: str | None = None
+    btcpay_api_key: str | None = None
+    btcpay_store_id: str | None = None
+
+    @field_validator("btcpay_url")
+    @classmethod
+    def normalize_btcpay_url(cls, value: str | None) -> str | None:
+        # Stored without a trailing slash. Blank means "not provided" — PATCH
+        # semantics: it must never wipe a stored value, same as omitting it.
+        if value is None:
+            return None
+        trimmed = value.strip().rstrip("/")
+        if not trimmed:
+            return None
+        if not trimmed.lower().startswith(("http://", "https://")):
+            raise ValueError("BTCPay server URL must start with http:// or https://")
+        # Guard against truncated hosts like "http://h": require a hostname
+        # with at least one dot, or localhost / host.docker.internal. Mirrors
+        # the dashboard rule in dashboard/src/lib/browserUrl.ts.
+        try:
+            hostname = (urlsplit(trimmed).hostname or "").lower()
+        except ValueError:
+            raise ValueError("BTCPay server URL is not a valid URL")
+        if hostname not in ("localhost", "host.docker.internal") and "." not in hostname:
+            raise ValueError(
+                "BTCPay server URL needs a full hostname "
+                "(e.g. btcpay.example.com, localhost, or host.docker.internal)"
+            )
+        return trimmed
+
+    @field_validator("btcpay_api_key", "btcpay_store_id")
+    @classmethod
+    def trim_btcpay_credential(cls, value: str | None) -> str | None:
+        # Trim; blank means "not provided" and never wipes a stored value.
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
+
+    @field_validator("btcpay_store_id")
+    @classmethod
+    def limit_store_id_length(cls, value: str | None) -> str | None:
+        # Column is String(64); reject early instead of failing at the DB.
+        if value is not None and len(value) > 64:
+            raise ValueError("BTCPay store ID must be 64 characters or fewer")
+        return value
 
     @field_validator("public_slug")
     @classmethod
@@ -86,7 +140,30 @@ class TenantUpdate(BaseModel):
 
 class TenantHealth(BaseModel):
     tenant: TenantResponse
-    lnbits_status: str  # compatibility field: current adapter connection status
+    # Current adapter connection status ("ok" | "unreachable").
+    connection_status: str
+    # Legacy name carrying the same value; kept for wire compatibility.
+    lnbits_status: str
+
+
+class BTCPayConnectionTest(BaseModel):
+    """Granular result of the read-only BTCPay connection probe.
+
+    ``auth_ok`` / ``store_found`` are None when an earlier step already failed
+    (never evaluated). ``detail`` is one actionable sentence and must never
+    contain credentials.
+    """
+
+    url_reachable: bool
+    auth_ok: bool | None = None
+    store_found: bool | None = None
+    ok: bool
+    detail: str
+
+
+class BTCPayAuthorizeUrl(BaseModel):
+    authorize_url: str
+    permissions: list[str]
 
 
 # ── Split Rules ───────────────────────────────────────────────────────────
