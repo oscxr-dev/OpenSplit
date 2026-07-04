@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/Badge';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { BtcPayConnectionPanel } from '@/components/settings/BtcPayConnectionPanel';
+import { BtcPayWebhookPanel } from '@/components/settings/BtcPayWebhookPanel';
 import { useAuth } from '@/hooks/useAuth';
 import { useSplits, useToggleSplitPublic } from '@/hooks/useSplits';
 import { useTheme } from '@/hooks/useTheme';
@@ -325,8 +326,9 @@ export function SettingsPage() {
             <CardContent className="p-0">
               <BtcPayConnectionPanel />
 
-              {/* PR 3 mounting point: the BTCPay webhook setup panel renders
-                  here, between the connection panel and Advanced. */}
+              <div className="border-t border-white/[0.07]">
+                <BtcPayWebhookPanel />
+              </div>
 
               <div className="border-t border-white/[0.07] p-6 sm:p-8">
                 {/* Privacy: the tenant UUID stays collapsed by default — only shown on demand. */}

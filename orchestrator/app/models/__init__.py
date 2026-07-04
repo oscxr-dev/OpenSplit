@@ -30,6 +30,9 @@ class Tenant(Base):
     btcpay_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     btcpay_store_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     btcpay_webhook_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set on every signature-valid BTCPay webhook (any event type); NULL until
+    # the first one lands or after the secret is regenerated ("verified" flag).
+    last_webhook_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     brand_display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     brand_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     brand_logo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
@@ -64,6 +67,10 @@ class Tenant(Base):
         if self.btcpay_api_key and len(self.btcpay_api_key) >= 8:
             return self.btcpay_api_key[-4:]
         return None
+
+    @property
+    def btcpay_webhook_secret_set(self) -> bool:
+        return bool(self.btcpay_webhook_secret)
 
 
 # ---------------------------------------------------------------------------

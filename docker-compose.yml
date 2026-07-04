@@ -298,6 +298,10 @@ services:
       ORCHESTRATOR_JWT_ALGORITHM: HS256
       ORCHESTRATOR_LNBITS_INTERNAL_URL: http://lnbits:5000
       ORCHESTRATOR_LNBITS_WEBHOOK_SECRET: ${ORCHESTRATOR_WEBHOOK_SECRET:-webhook-dev-secret}
+      # Base URL BTCPay uses to DELIVER webhooks to this orchestrator. The
+      # local default targets the Docker host: BTCPay runs in its own compose
+      # network, where "localhost" would resolve to BTCPay's own container.
+      ORCHESTRATOR_PUBLIC_BASE_URL: ${ORCHESTRATOR_PUBLIC_BASE_URL:-http://host.docker.internal:8000}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-oscar@admin.com}
       ORCHESTRATOR_SEED_ADMIN_PASSWORD: ${ORCHESTRATOR_SEED_ADMIN_PASSWORD:-oscar123}
       ORCHESTRATOR_LOG_LEVEL: INFO

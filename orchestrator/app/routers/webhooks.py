@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -152,6 +153,12 @@ async def btcpay_webhook(
     sig = request.headers.get("BTCPay-Sig", "")
     if not BTCPayClient.verify_webhook_sig(tenant.btcpay_webhook_secret, body, sig):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid signature")
+
+    # Signature-valid delivery: record webhook liveness before any event
+    # filtering (even ignored event types prove BTCPay reaches us with the
+    # right secret). Committed now because later handling may bail out early.
+    tenant.last_webhook_at = datetime.now(timezone.utc)
+    await session.commit()
 
     # Parse event
     try:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -9,6 +11,10 @@ _INSECURE_DEFAULTS = {
     "lnbits_webhook_secret": "change-me-webhook-secret",
     "seed_admin_password": "change-me-in-production",
 }
+
+# Hostnames that only resolve on the operator's own machine/Docker host. A
+# public_base_url pointing at one of these can never receive real webhooks.
+_LOCAL_ONLY_HOSTNAMES = {"localhost", "127.0.0.1", "::1", "host.docker.internal"}
 
 
 class Settings(BaseSettings):
@@ -33,6 +39,11 @@ class Settings(BaseSettings):
     # Seed
     seed_admin_password: str = _INSECURE_DEFAULTS["seed_admin_password"]
 
+    # Public base URL of THIS orchestrator as external services reach it —
+    # used to compose the BTCPay webhook delivery URL shown to the operator.
+    # The localhost default only works when BTCPay runs on the same host.
+    public_base_url: str = "http://localhost:8000"
+
     # CORS — comma-separated list of allowed origins. Defaults to local dev only.
     # In production this MUST be set explicitly via ORCHESTRATOR_CORS_ORIGINS.
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
@@ -48,6 +59,12 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return value
+
+    @field_validator("public_base_url")
+    @classmethod
+    def _normalize_public_base_url(cls, value: str) -> str:
+        # Stored without a trailing slash so composed webhook URLs stay clean.
+        return value.strip().rstrip("/")
 
     @property
     def is_production(self) -> bool:
@@ -71,6 +88,15 @@ class Settings(BaseSettings):
             problems.append("ORCHESTRATOR_CORS_ORIGINS must not include '*' in production")
         if not self.cors_origins:
             problems.append("ORCHESTRATOR_CORS_ORIGINS must be set in production")
+
+        # BTCPay must be able to deliver webhooks to this URL, so a local-only
+        # host (the localhost default included) can never be right in production.
+        public_host = (urlsplit(self.public_base_url).hostname or "").lower()
+        if not public_host or public_host in _LOCAL_ONLY_HOSTNAMES:
+            problems.append(
+                "ORCHESTRATOR_PUBLIC_BASE_URL must be a publicly reachable URL "
+                "(still the local-only default)"
+            )
 
         if problems:
             raise RuntimeError(

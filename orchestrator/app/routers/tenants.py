@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import secrets
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.core.deps import get_current_tenant, get_current_user
 from app.database import get_session
 from app.models import Tenant, User
 from app.schemas import (
     BTCPayAuthorizeUrl,
     BTCPayConnectionTest,
+    BTCPayWebhookSecret,
     TenantHealth,
     TenantResponse,
     TenantUpdate,
@@ -36,6 +39,10 @@ BTCPAY_MINIMAL_PERMISSIONS = [
 # Probe timeout: a connection check should answer fast, not hang for the
 # client's default 20s.
 BTCPAY_TEST_TIMEOUT_SECONDS = 10.0
+
+# The events the operator must select in BTCPay's Create Webhook form — the
+# only ones webhooks.py acts on (both mark an invoice as settled).
+BTCPAY_WEBHOOK_EVENTS = ["InvoiceSettled", "InvoicePaymentSettled"]
 
 
 def interpret_store_probe(status_code: int | None) -> BTCPayConnectionTest:
@@ -183,6 +190,31 @@ async def btcpay_connection_test(
     finally:
         await client.close()
     return interpret_store_probe(status_code)
+
+
+@router.post("/me/btcpay/webhook-secret", response_model=BTCPayWebhookSecret)
+async def generate_btcpay_webhook_secret(
+    current_user: User = Depends(get_current_user),
+    tenant: Tenant = Depends(get_current_tenant),
+    session: AsyncSession = Depends(get_session),
+) -> BTCPayWebhookSecret:
+    """Generate (or regenerate) the tenant's BTCPay webhook secret.
+
+    This response is the only time the secret is ever readable. Regenerating
+    overwrites the stored secret — deliveries signed with the old one are
+    rejected from now on — and resets last_webhook_at, so the dashboard drops
+    back to "waiting for first webhook" until BTCPay delivers with the new
+    secret.
+    """
+    secret = secrets.token_urlsafe(32)
+    tenant.btcpay_webhook_secret = secret
+    tenant.last_webhook_at = None
+    await session.commit()
+    return BTCPayWebhookSecret(
+        secret=secret,
+        webhook_url=f"{settings.public_base_url}/api/v1/webhooks/btcpay/{tenant.id}",
+        events=list(BTCPAY_WEBHOOK_EVENTS),
+    )
 
 
 @router.get("/me/btcpay/authorize-url", response_model=BTCPayAuthorizeUrl)

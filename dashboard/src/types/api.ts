@@ -21,12 +21,17 @@ export interface TenantResponse {
   public_transparency_enabled?: boolean | null;
   public_country?: string | null;
   public_city?: string | null;
-  /** BTCPay connection. The raw API key is never sent by the server — only
-   *  presence indicators (`btcpay_api_key_set` / `btcpay_api_key_last4`). */
+  /** BTCPay connection. The raw API key and webhook secret are never sent by
+   *  the server — only presence indicators (`btcpay_api_key_set` /
+   *  `btcpay_api_key_last4` / `btcpay_webhook_secret_set`). */
   btcpay_url?: string | null;
   btcpay_store_id?: string | null;
   btcpay_api_key_set?: boolean;
   btcpay_api_key_last4?: string | null;
+  btcpay_webhook_secret_set?: boolean;
+  /** Timestamp of the last signature-valid BTCPay webhook; null until the
+   *  first one lands (or after the secret is regenerated). */
+  last_webhook_at?: string | null;
   active: boolean;
   created_at: string;
 }
@@ -64,6 +69,14 @@ export interface BtcPayConnectionTest {
 export interface BtcPayAuthorizeUrl {
   authorize_url: string;
   permissions: string[];
+}
+
+/** One-time reveal from POST /tenants/me/btcpay/webhook-secret — the only
+ *  response that ever carries the raw webhook secret. */
+export interface BtcPayWebhookSecret {
+  secret: string;
+  webhook_url: string;
+  events: string[];
 }
 
 export interface SplitTarget {

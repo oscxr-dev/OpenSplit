@@ -43,11 +43,14 @@ class TenantResponse(BaseModel):
     public_city: str | None = None
     # BTCPay connection — REDACTION CONTRACT: the raw btcpay_api_key and
     # btcpay_webhook_secret must NEVER be fields on this (or any) response
-    # schema. Only presence indicators leave the server.
+    # schema. Only presence indicators leave the server. (The sole exception is
+    # BTCPayWebhookSecret: the one-time reveal at generation time.)
     btcpay_url: str | None = None
     btcpay_store_id: str | None = None
     btcpay_api_key_set: bool = False
     btcpay_api_key_last4: str | None = None
+    btcpay_webhook_secret_set: bool = False
+    last_webhook_at: datetime | None = None
     active: bool
     created_at: datetime
 
@@ -164,6 +167,19 @@ class BTCPayConnectionTest(BaseModel):
 class BTCPayAuthorizeUrl(BaseModel):
     authorize_url: str
     permissions: list[str]
+
+
+class BTCPayWebhookSecret(BaseModel):
+    """One-time reveal of a freshly generated webhook secret.
+
+    The ONLY response that ever carries the raw secret — every other endpoint
+    is bound by the redaction contract (``btcpay_webhook_secret_set`` /
+    ``last_webhook_at`` are the only readable traces).
+    """
+
+    secret: str
+    webhook_url: str
+    events: list[str]
 
 
 # ── Split Rules ───────────────────────────────────────────────────────────
