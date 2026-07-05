@@ -216,7 +216,9 @@ async def public_transparency(
     ).scalar_one()
 
     return build_public_view(
-        name=tenant.brand_display_name or tenant.name,
+        # Display name is tenant.name only; brand_display_name stays dormant
+        # so stale seeded branding can never resurface.
+        name=tenant.name,
         slug=slug,
         show_amounts=tenant.public_show_amounts,
         targets=targets,
@@ -284,7 +286,7 @@ async def list_public_teams(
 
     teams = [
         PublicTeamSummary(
-            name=t.brand_display_name or t.name,
+            name=t.name,
             slug=t.public_slug or "",
             active_rule_count=int(rule_counts.get(t.id, 0)),
             completed_splits=int(split_counts.get(t.id, 0)),

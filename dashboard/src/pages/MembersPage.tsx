@@ -7,6 +7,8 @@ import { useInvoices } from '@/hooks/useInvoices';
 import { useSplits } from '@/hooks/useSplits';
 import { TeamMap } from '@/components/team/TeamMap';
 import { SplitRulesSection } from '@/components/team/SplitRulesSection';
+import { StatusSummaryPill } from '@/components/team/StatusSummaryPill';
+import { RULE_BOARD_ANCHOR } from '@/lib/statusStrip';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
@@ -78,7 +80,8 @@ export function MembersPage() {
     () => (data ?? []).filter((member) => (member.current_percentage ?? 0) > 0),
     [data]
   );
-  const workspaceName = tenant?.tenant.brand_display_name || tenant?.tenant.name || 'OpenSplit';
+  // Display name comes from tenant.name only — brand_display_name is dormant.
+  const workspaceName = tenant?.tenant.name || 'OpenSplit';
 
   // Active split rules drive the tabs attached to the top of the graph.
   const activeRules = useMemo(() => (splits ?? []).filter((rule) => rule.active), [splits]);
@@ -150,6 +153,8 @@ export function MembersPage() {
 
   return (
     <div className="space-y-8">
+      <StatusSummaryPill />
+
       {activeRules.length === 0 ? (
         <EmptyState
           icon={<Users className="h-8 w-8 text-[#94A3B8]" />}
@@ -162,7 +167,7 @@ export function MembersPage() {
         <TeamMap members={members} workspaceName={workspaceName} selectedRule={selectedRule} tabsSlot={ruleTabs} />
       )}
 
-      <div ref={splitSectionRef}>
+      <div ref={splitSectionRef} id={RULE_BOARD_ANCHOR} className="scroll-mt-24">
         <SplitRulesSection
           key={splitEditorKey}
           splits={splits}

@@ -77,10 +77,10 @@ async def _seed_tenant(Session) -> Tenant:
     return tenant
 
 
-async def _seed_partial_rule_payment(Session, tenant: Tenant, percentages, amount_sats=10_000):
+async def _seed_partial_rule_payment(Session, tenant: Tenant, percentages, amount_sats=10_000, active=True):
     rule_id, payment_id = uuid.uuid4(), uuid.uuid4()
     async with Session() as s:
-        s.add(SplitRule(id=rule_id, tenant_id=tenant.id, name="partial", active=True, version=1))
+        s.add(SplitRule(id=rule_id, tenant_id=tenant.id, name="partial", active=active, version=1))
         await s.flush()
         for i, p in enumerate(percentages):
             s.add(SplitTarget(split_rule_id=rule_id, label=f"M{i}", ln_address=f"m{i}@x.com", percentage=p, order=i))
@@ -201,7 +201,9 @@ async def test_activation_accepts_partial_and_rejects_over_100(Session):
         result = await activate_split(str(partial_id), current_user=None, tenant=tenant, session=s)
     assert result.active is True
 
-    over_id, _ = await _seed_partial_rule_payment(Session, tenant, [70, 70])  # 140%
+    # Seeded inactive: the partial-unique index forbids a second active rule,
+    # and this rule must go through the activate endpoint to hit the 422 anyway.
+    over_id, _ = await _seed_partial_rule_payment(Session, tenant, [70, 70], active=False)  # 140%
     with pytest.raises(HTTPException) as exc:
         async with Session() as s:
             await activate_split(str(over_id), current_user=None, tenant=tenant, session=s)

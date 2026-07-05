@@ -196,10 +196,18 @@ export function PublicTransparencyPage() {
                     <p className="mt-1 truncate text-xl font-semibold text-[#F5F5F7]">Private data hidden</p>
                   </div>
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-2">
+                <div className="mt-4 grid grid-cols-3 gap-2">
                   <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2">
                     <p className="text-[11px] text-[#94A3B8]">Wallet data</p>
                     <p className="mt-1 text-sm font-semibold text-[#F5F5F7]">not shown</p>
+                  </div>
+                  <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2">
+                    <p className="text-[11px] text-[#94A3B8]">Amounts</p>
+                    <p className="mt-1 truncate font-mono text-sm font-semibold text-[#F5F5F7]">
+                      {data.show_amounts && data.total_sats != null
+                        ? `${data.total_sats.toLocaleString()} sats`
+                        : 'hidden'}
+                    </p>
                   </div>
                   <div className="rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2">
                     <p className="text-[11px] text-[#94A3B8]">Recent activity</p>

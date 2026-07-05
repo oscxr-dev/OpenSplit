@@ -30,6 +30,9 @@ class Tenant(Base):
     btcpay_api_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     btcpay_store_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     btcpay_webhook_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set on every signature-valid BTCPay webhook (any event type); NULL until
+    # the first one lands or after the secret is regenerated ("verified" flag).
+    last_webhook_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     brand_display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     brand_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
     brand_logo_url: Mapped[str | None] = mapped_column(String(1024), nullable=True)
@@ -39,7 +42,8 @@ class Tenant(Base):
     # Public transparency (opt-in). Slug is the public URL key; disabled by default.
     public_slug: Mapped[str | None] = mapped_column(String(64), nullable=True, unique=True)
     public_transparency_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    public_show_amounts: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Privacy P1: amounts are private by default; tenants must explicitly opt in.
+    public_show_amounts: Mapped[bool] = mapped_column(Boolean, default=False)
     # Optional coarse public location for the Public Teams map (country/city level
     # only — never a precise address or coordinates). NULL => "Unknown location".
     public_country: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -49,6 +53,24 @@ class Tenant(Base):
 
     users: Mapped[list[User]] = relationship("User", back_populates="tenant", lazy="selectin")
     split_rules: Mapped[list[SplitRule]] = relationship("SplitRule", back_populates="tenant", lazy="selectin")
+
+    # Redaction contract: the raw btcpay_api_key / btcpay_webhook_secret must
+    # never be serialized. API responses only carry these presence indicators.
+    @property
+    def btcpay_api_key_set(self) -> bool:
+        return bool(self.btcpay_api_key)
+
+    @property
+    def btcpay_api_key_last4(self) -> str | None:
+        # Reveal a suffix only when the key is long enough that four characters
+        # stay meaningless on their own (guards short dev/test keys).
+        if self.btcpay_api_key and len(self.btcpay_api_key) >= 8:
+            return self.btcpay_api_key[-4:]
+        return None
+
+    @property
+    def btcpay_webhook_secret_set(self) -> bool:
+        return bool(self.btcpay_webhook_secret)
 
 
 # ---------------------------------------------------------------------------
@@ -73,6 +95,16 @@ class User(Base):
 # ---------------------------------------------------------------------------
 class SplitRule(Base):
     __tablename__ = "split_rules"
+    # Exactly one active processing rule per tenant: partial unique index over
+    # active rows only. Inactive rules (history, drafts) are unlimited.
+    __table_args__ = (
+        Index(
+            "uq_split_rules_one_active_per_tenant",
+            "tenant_id",
+            unique=True,
+            postgresql_where=text("active"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("tenants.id"), nullable=False)
@@ -159,6 +191,10 @@ class PaymentSplit(Base):
     split_target_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("split_targets.id"), nullable=False)
     amount_sats: Mapped[int] = mapped_column(Integer, nullable=False)
     btcpay_payout_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # BTCPay's raw payout state (e.g. "AwaitingPayment"), stored verbatim on
+    # every reconciliation check. Informational only — `status` stays the
+    # single source of truth for money logic.
+    btcpay_payout_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)

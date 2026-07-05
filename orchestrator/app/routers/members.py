@@ -92,9 +92,9 @@ async def list_members(
     tenant: Tenant = Depends(get_current_tenant),
     session: AsyncSession = Depends(get_session),
 ) -> list[MemberResponse]:
-    # Multiple rules can be active (board tabs); show members of the deterministic
-    # default rule (newest active: highest version, then most recent) — the same
-    # rule invoice/payout creation uses. With one active rule this is unchanged.
+    # The tenant's single active rule (DB-enforced by the partial unique index
+    # uq_split_rules_one_active_per_tenant). The ordering is a defensive
+    # tie-break only, mirroring the split engine's selection.
     active_rule_id = (
         await session.execute(
             select(SplitRule.id)

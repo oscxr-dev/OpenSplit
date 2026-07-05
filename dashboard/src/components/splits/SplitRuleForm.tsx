@@ -1,10 +1,16 @@
 import { useState, useCallback } from 'react';
-import { Plus, Trash2, GripVertical, Zap } from 'lucide-react';
+import { AlertTriangle, Plus, Trash2, GripVertical, Zap } from 'lucide-react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { splitRuleSchema, type SplitRuleFormData } from '@/schemas/split';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Badge } from '@/components/ui/Badge';
+import {
+  destinationBadge,
+  looksLikeEmailProvider,
+  EMAIL_ADDRESS_CAUTION,
+} from '@/lib/destinations';
 import { cn } from '@/lib/utils';
 
 const TARGET_COLORS = [
@@ -119,7 +125,15 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
           </div>
         </div>
 
-        {fields.map((field, index) => (
+        {fields.map((field, index) => {
+          const rowLnAddress = targets?.[index]?.ln_address;
+          const rowHasReceiver = targets?.[index]?.has_lnd_receiver;
+          const badge = destinationBadge({
+            ln_address: rowLnAddress,
+            has_lnd_receiver: rowHasReceiver,
+          });
+          const showEmailCaution = !rowHasReceiver && looksLikeEmailProvider(rowLnAddress);
+          return (
           <div
             key={field.id}
             className="space-y-2.5 rounded-xl border border-white/[0.16] bg-white/[0.06] p-3.5"
@@ -135,6 +149,7 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
               <span className="text-xs font-semibold text-white/70">
                 Destination {index + 1}
               </span>
+              <Badge variant={badge.variant} className="ml-1">{badge.label}</Badge>
               {fields.length > 1 && (
                 <button
                   type="button"
@@ -182,8 +197,16 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
                 {...register(`targets.${index}.percentage`, { valueAsNumber: true })}
               />
             </div>
+
+            {showEmailCaution && (
+              <p className="flex items-center gap-1.5 text-xs text-amber-300">
+                <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.8} />
+                {EMAIL_ADDRESS_CAUTION}
+              </p>
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Allocation indicator — partial rules are allowed; the remainder stays in store. */}

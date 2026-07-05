@@ -19,7 +19,8 @@ from app.models import SplitRule, SplitTarget, Tenant, User
 
 # ── Config from env (matching the live regtest LNBits wallets) ─────
 DEMO_TENANT_NAME = os.getenv("SEED_TENANT_NAME", "bitcrew-demo")
-DEMO_BRAND_DISPLAY_NAME = os.getenv("SEED_BRAND_DISPLAY_NAME", "BitCrew")
+# brand_display_name is deliberately not seeded: every display path uses
+# tenant.name and the column stays dormant.
 DEMO_ADMIN_EMAIL = os.getenv("SEED_ADMIN_EMAIL", "oscar@admin.com")
 DEMO_ADMIN_PASSWORD = os.getenv("SEED_ADMIN_PASSWORD", settings.seed_admin_password)
 
@@ -49,7 +50,6 @@ async def seed() -> None:
         if tenant is None:
             tenant = Tenant(
                 name=DEMO_TENANT_NAME,
-                brand_display_name=DEMO_BRAND_DISPLAY_NAME,
                 lnbits_admin_key=LNBITS_ADMIN_KEY,
                 lnbits_url=LNBITS_URL,
             )

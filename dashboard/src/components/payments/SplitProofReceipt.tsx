@@ -1,8 +1,12 @@
-import { AlertCircle, CheckCircle, Copy, ReceiptText, RotateCcw, ShieldCheck } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Copy, ExternalLink, ReceiptText, RotateCcw, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 import { useProof } from '@/hooks/useProof';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { formatDate, formatSats, payoutStatusLabel } from '@/lib/utils';
+import { cn, copyToClipboard, formatDate, formatSats, payoutStatusLabel } from '@/lib/utils';
+import { btcpayPayoutsUrl, isWaitingInBtcpay, WAITING_IN_BTCPAY_HINT } from '@/lib/payments';
+import { proofPermalink } from '@/lib/browserUrl';
 import { proofBalanceLabel, truncateMiddle } from '@/lib/transparency';
 import type { Invoice, PaymentSplit } from '@/types/api';
 
@@ -14,6 +18,21 @@ interface SplitProofReceiptProps {
 
 export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: SplitProofReceiptProps) {
   const { data: proof, isLoading, isError, refetch } = useProof(payment.id);
+  const { tenant } = useAuth();
+  const payoutsUrl = btcpayPayoutsUrl(
+    tenant?.tenant.btcpay_url,
+    tenant?.tenant.btcpay_store_id,
+    window.location.hostname
+  );
+  // Shareable app permalink to this proof (authenticated PageProof route) —
+  // the receipt footer shows this instead of the raw /payments API path.
+  const proofLink = proofPermalink(window.location.origin, payment.id);
+
+  function handleCopyProofLink() {
+    copyToClipboard(proofLink)
+      .then(() => toast.success('Proof link copied'))
+      .catch(() => toast.error('Could not copy proof link'));
+  }
 
   const proofRows = proof?.members.map((member) => {
     const matchingSplit = payment.splits.find((split) => split.id === member.split_id);
@@ -24,6 +43,7 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
       percentage: member.percentage,
       amountSats: member.amount_sats,
       status: member.payout_status,
+      rawState: member.btcpay_payout_state ?? matchingSplit?.btcpay_payout_state ?? null,
       retrySplit: matchingSplit,
     };
   }) ?? payment.splits.map((split) => ({
@@ -33,6 +53,7 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
     percentage: null,
     amountSats: split.amount_sats,
     status: split.status,
+    rawState: split.btcpay_payout_state ?? null,
     retrySplit: split,
   }));
 
@@ -91,37 +112,62 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
         )}
 
         <div className="mt-4 space-y-2">
-          {proofRows.map((row) => (
-            <div key={row.id} className="grid gap-3 rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3 sm:grid-cols-[1fr_auto_auto] sm:items-center">
-              <div className="min-w-0">
-                <p className="font-medium text-[#F5F5F7]">{row.label}</p>
-                <p className="mt-1 truncate font-mono text-xs text-[#94A3B8]">
-                  {row.identity ? truncateMiddle(row.identity) : 'no public identity'}
-                </p>
-              </div>
-              <p className="font-mono text-sm font-semibold text-[#F5F5F7]">
-                {row.percentage != null ? `${row.percentage}%` : '—'}
-              </p>
-              <div className="flex items-center justify-between gap-3 sm:justify-end">
-                <div className="text-right">
-                  <p className="font-mono text-sm font-semibold text-[#F5F5F7]">{formatSats(row.amountSats)}</p>
-                  <p className="mt-1 text-xs text-[#94A3B8]">{payoutStatusLabel(row.status)}</p>
+          {proofRows.map((row) => {
+            const waiting = isWaitingInBtcpay({ status: row.status, btcpay_payout_state: row.rawState });
+            return (
+              <div key={row.id} className="rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3">
+                <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-center">
+                  <div className="min-w-0">
+                    <p className="font-medium text-[#F5F5F7]">{row.label}</p>
+                    <p className="mt-1 truncate font-mono text-xs text-[#94A3B8]">
+                      {row.identity ? truncateMiddle(row.identity) : 'no public identity'}
+                    </p>
+                  </div>
+                  <p className="font-mono text-sm font-semibold text-[#F5F5F7]">
+                    {row.percentage != null ? `${row.percentage}%` : '—'}
+                  </p>
+                  <div className="flex items-center justify-between gap-3 sm:justify-end">
+                    <div className="text-right">
+                      <p className="font-mono text-sm font-semibold text-[#F5F5F7]">{formatSats(row.amountSats)}</p>
+                      <p className={cn('mt-1 text-xs', waiting ? 'text-amber-200' : 'text-[#94A3B8]')}>
+                        {waiting ? 'Waiting in BTCPay' : payoutStatusLabel(row.status)}
+                      </p>
+                    </div>
+                    {row.status === 'failed' && row.retrySplit && onRetrySplit && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        loading={retrying}
+                        onClick={() => onRetrySplit(row.retrySplit!)}
+                        aria-label={`Retry payout for ${row.label}`}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                {row.status === 'failed' && row.retrySplit && onRetrySplit && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    loading={retrying}
-                    onClick={() => onRetrySplit(row.retrySplit!)}
-                    aria-label={`Retry payout for ${row.label}`}
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                  </Button>
+
+                {waiting && (
+                  <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-amber-300/15 bg-amber-400/[0.08] px-2.5 py-1.5 text-xs text-amber-200">
+                    <Clock className="h-3.5 w-3.5 shrink-0" strokeWidth={1.8} />
+                    <span>{WAITING_IN_BTCPAY_HINT}.</span>
+                    {payoutsUrl && (
+                      <a
+                        href={payoutsUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 font-medium underline underline-offset-2 hover:text-amber-100"
+                      >
+                        Open in BTCPay
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -136,14 +182,21 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
             <p className="mt-1 truncate font-mono text-[#F5F5F7]">{payment.id}</p>
           </div>
           <div className="rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3">
-            <p className="text-[#94A3B8]">Proof source</p>
-            <p className="mt-1 font-mono text-[#F5F5F7]">/payments/{payment.id}/proof</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[#94A3B8]">Proof link</p>
+              <button
+                type="button"
+                onClick={handleCopyProofLink}
+                className="inline-flex shrink-0 items-center gap-1 font-medium text-[#FF2D78] transition-colors hover:text-[#FF6DA6]"
+              >
+                <Copy className="h-3.5 w-3.5" strokeWidth={1.8} />
+                Copy proof link
+              </button>
+            </div>
+            <p className="mt-1 truncate font-mono text-[#F5F5F7]">{proofLink}</p>
           </div>
           <div className="rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3 sm:col-span-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[#94A3B8]">Balance</p>
-              <Copy className="h-3.5 w-3.5 text-[#94A3B8]" strokeWidth={1.8} />
-            </div>
+            <p className="text-[#94A3B8]">Balance</p>
             <p className="mt-1 font-mono text-[#F5F5F7]">
               {proof
                 ? `${formatSats(proof.integrity.split_sum_sats)} / ${formatSats(proof.integrity.payment_amount_sats)}`

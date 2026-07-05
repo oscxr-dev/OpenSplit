@@ -4,10 +4,12 @@ import { cn } from '@/lib/utils';
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  /** Muted helper line under the input; hidden while an error is shown. */
+  hint?: string;
 }
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, id, ...props }, ref) => {
+  ({ className, label, error, hint, id, ...props }, ref) => {
     const inputId = id || label?.toLowerCase().replace(/\s+/g, '-');
 
     return (
@@ -33,6 +35,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         />
         {error && (
           <p className="mt-1.5 text-xs text-red-400">{error}</p>
+        )}
+        {hint && !error && (
+          <p className="mt-1.5 text-xs text-[#94A3B8]">{hint}</p>
         )}
       </div>
     );

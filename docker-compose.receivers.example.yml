@@ -1,0 +1,26 @@
+# Example overlay for dynamic LND receivers (demo/regtest payouts).
+#
+# Copy to docker-compose.receivers.yml and fill in REAL values for each
+# receiver. The real file is gitignored — never commit it.
+#
+# For a split recipient whose LABEL matches LND_RECEIVER_<LABEL>_*, the
+# orchestrator mints a fresh BOLT11 invoice for the exact split amount on the
+# recipient's own LND node (REST API) and pays THAT invoice via BTCPay, instead
+# of using a Lightning address.
+#   <LABEL> is upper-cased; non-alphanumerics become "_" (e.g. Carol -> CAROL).
+#
+# Always bring the orchestrator up with BOTH files so these vars are applied:
+#   docker compose -f docker-compose.yml -f docker-compose.receivers.yml up -d
+#
+# Getting the hex values from an LND node:
+#   MACAROON_HEX: xxd -p -c 0 ~/.lnd/data/chain/bitcoin/regtest/invoice.macaroon
+#   TLS_CERT_HEX: xxd -p -c 0 ~/.lnd/tls.cert
+services:
+  orchestrator:
+    environment:
+      LND_RECEIVER_CAROL_URL: "https://carol-lnd.example:8084"
+      LND_RECEIVER_CAROL_MACAROON_HEX: "<hex-macaroon-here>"
+      LND_RECEIVER_CAROL_TLS_CERT_HEX: "<hex-tls-cert-here>"
+      LND_RECEIVER_DAVE_URL: "https://dave-lnd.example:8085"
+      LND_RECEIVER_DAVE_MACAROON_HEX: "<hex-macaroon-here>"
+      LND_RECEIVER_DAVE_TLS_CERT_HEX: "<hex-tls-cert-here>"

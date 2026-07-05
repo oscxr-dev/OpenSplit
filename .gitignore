@@ -19,6 +19,9 @@ dashboard/.env.*.local
 # ── Deploy / compose variants with real infra references ─────────────
 docker-compose.cherito.yml
 docker-compose.*.local.yml
+# Holds real local LND receiver credentials (URL/macaroon/TLS cert).
+# Commit only docker-compose.receivers.example.yml.
+docker-compose.receivers.yml
 
 # ── Backups / dumps / wallet material ────────────────────────────────
 backups/

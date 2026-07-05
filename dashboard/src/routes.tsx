@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
 import { LoginPage } from '@/pages/LoginPage';
 import { SettingsPage } from '@/pages/SettingsPage';
 import { MembersPage } from '@/pages/MembersPage';
+import { PageProof } from '@/pages/PageProof';
 import { PublicTransparencyPage } from '@/pages/PublicTransparencyPage';
 import { PublicTeamsPage } from '@/pages/PublicTeamsPage';
 
@@ -45,6 +46,7 @@ export const router = createBrowserRouter([
           { index: true, element: <Navigate to="/team" replace /> },
           { path: 'team', element: <MembersPage /> },
           { path: 'settings', element: <SettingsPage /> },
+          { path: 'proof/:paymentId', element: <PageProof /> },
         ],
       },
     ],

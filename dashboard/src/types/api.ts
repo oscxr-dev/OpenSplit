@@ -21,6 +21,17 @@ export interface TenantResponse {
   public_transparency_enabled?: boolean | null;
   public_country?: string | null;
   public_city?: string | null;
+  /** BTCPay connection. The raw API key and webhook secret are never sent by
+   *  the server — only presence indicators (`btcpay_api_key_set` /
+   *  `btcpay_api_key_last4` / `btcpay_webhook_secret_set`). */
+  btcpay_url?: string | null;
+  btcpay_store_id?: string | null;
+  btcpay_api_key_set?: boolean;
+  btcpay_api_key_last4?: string | null;
+  btcpay_webhook_secret_set?: boolean;
+  /** Timestamp of the last signature-valid BTCPay webhook; null until the
+   *  first one lands (or after the secret is regenerated). */
+  last_webhook_at?: string | null;
   active: boolean;
   created_at: string;
 }
@@ -39,7 +50,33 @@ export interface PublicTeamSummary {
 
 export interface TenantHealth {
   tenant: TenantResponse;
+  /** Current adapter connection status ("ok" | "unreachable"). */
+  connection_status: string;
+  /** Legacy alias of connection_status; do not use in new code. */
   lnbits_status: string;
+}
+
+/** Granular result of POST /tenants/me/btcpay/test. `auth_ok` / `store_found`
+ *  are null when an earlier check already failed (never evaluated). */
+export interface BtcPayConnectionTest {
+  url_reachable: boolean;
+  auth_ok: boolean | null;
+  store_found: boolean | null;
+  ok: boolean;
+  detail: string;
+}
+
+export interface BtcPayAuthorizeUrl {
+  authorize_url: string;
+  permissions: string[];
+}
+
+/** One-time reveal from POST /tenants/me/btcpay/webhook-secret — the only
+ *  response that ever carries the raw webhook secret. */
+export interface BtcPayWebhookSecret {
+  secret: string;
+  webhook_url: string;
+  events: string[];
 }
 
 export interface SplitTarget {
@@ -83,6 +120,9 @@ export interface PaymentSplit {
   ln_address: string | null;
   amount_sats: number;
   status: string;
+  /** BTCPay's raw payout state ("AwaitingPayment", ...) from the last
+   *  reconciliation check; null until the first check lands. */
+  btcpay_payout_state?: string | null;
   payout_id: string | null;
   failure_reason: string | null;
   retry_count: number;
@@ -147,6 +187,8 @@ export interface ProofSplit {
   percentage: number | null;
   amount_sats: number;
   payout_status: string;
+  /** Raw BTCPay payout state from the last reconciliation check. */
+  btcpay_payout_state?: string | null;
   payout_id: string | null;
 }
 
@@ -195,6 +237,19 @@ export interface PublicTransparency {
   distribution: PublicSplitMember[];
   recent_payments: PublicRecentPayment[];
   total_sats: number | null;
+}
+
+// ── Aggregate pipeline status (GET /tenants/me/status) ─────────────────────
+export interface TenantStatus {
+  store: 'not_configured' | 'unreachable' | 'ok';
+  webhook: 'not_configured' | 'waiting' | 'verified';
+  active_rule: { name: string; version: number } | null;
+  payout_delivery: 'idle' | 'delivering' | 'waiting_in_btcpay' | 'failing';
+  /** Whether BTCPay has a Lightning payout processor configured to auto-send
+   *  payouts. "unknown" when the store isn't reachable or the API key can't
+   *  read processors — never nag in that case. */
+  lightning_payout_processor: 'active' | 'missing' | 'unknown';
+  public_page: 'off' | 'on';
 }
 
 export interface DashboardSummary {

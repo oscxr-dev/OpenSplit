@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -141,11 +142,23 @@ async def btcpay_webhook(
     if not tenant or tenant.adapter_type != "btcpay":
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BTCPay tenant not found")
 
-    # Verify signature if a secret is configured
+    # Strict secret policy: without a configured secret every webhook would be
+    # trivially forgeable, so refuse to process anything until one is set.
+    if not tenant.btcpay_webhook_secret:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Webhook secret not configured for this tenant",
+        )
+
     sig = request.headers.get("BTCPay-Sig", "")
-    if tenant.btcpay_webhook_secret:
-        if not BTCPayClient.verify_webhook_sig(tenant.btcpay_webhook_secret, body, sig):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid signature")
+    if not BTCPayClient.verify_webhook_sig(tenant.btcpay_webhook_secret, body, sig):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid signature")
+
+    # Signature-valid delivery: record webhook liveness before any event
+    # filtering (even ignored event types prove BTCPay reaches us with the
+    # right secret). Committed now because later handling may bail out early.
+    tenant.last_webhook_at = datetime.now(timezone.utc)
+    await session.commit()
 
     # Parse event
     try:

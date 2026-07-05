@@ -4,6 +4,7 @@ import re
 import uuid
 from datetime import datetime
 from decimal import Decimal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
@@ -38,8 +39,21 @@ class TenantResponse(BaseModel):
     brand_logo_url: str | None = None
     public_slug: str | None = None
     public_transparency_enabled: bool = False
+    # Per-tenant display preference, NOT a secret — safe to expose so the UI can
+    # reflect the saved toggle. Amounts stay private by default (Privacy P1).
+    public_show_amounts: bool = False
     public_country: str | None = None
     public_city: str | None = None
+    # BTCPay connection — REDACTION CONTRACT: the raw btcpay_api_key and
+    # btcpay_webhook_secret must NEVER be fields on this (or any) response
+    # schema. Only presence indicators leave the server. (The sole exception is
+    # BTCPayWebhookSecret: the one-time reveal at generation time.)
+    btcpay_url: str | None = None
+    btcpay_store_id: str | None = None
+    btcpay_api_key_set: bool = False
+    btcpay_api_key_last4: str | None = None
+    btcpay_webhook_secret_set: bool = False
+    last_webhook_at: datetime | None = None
     active: bool
     created_at: datetime
 
@@ -58,8 +72,55 @@ class TenantUpdate(BaseModel):
     lnbits_url: str | None = None
     public_slug: str | None = None
     public_transparency_enabled: bool | None = None
+    public_show_amounts: bool | None = None
     public_country: str | None = None
     public_city: str | None = None
+    btcpay_url: str | None = None
+    btcpay_api_key: str | None = None
+    btcpay_store_id: str | None = None
+
+    @field_validator("btcpay_url")
+    @classmethod
+    def normalize_btcpay_url(cls, value: str | None) -> str | None:
+        # Stored without a trailing slash. Blank means "not provided" — PATCH
+        # semantics: it must never wipe a stored value, same as omitting it.
+        if value is None:
+            return None
+        trimmed = value.strip().rstrip("/")
+        if not trimmed:
+            return None
+        if not trimmed.lower().startswith(("http://", "https://")):
+            raise ValueError("BTCPay server URL must start with http:// or https://")
+        # Guard against truncated hosts like "http://h": require a hostname
+        # with at least one dot, or localhost / host.docker.internal. Mirrors
+        # the dashboard rule in dashboard/src/lib/browserUrl.ts.
+        try:
+            hostname = (urlsplit(trimmed).hostname or "").lower()
+        except ValueError:
+            raise ValueError("BTCPay server URL is not a valid URL")
+        if hostname not in ("localhost", "host.docker.internal") and "." not in hostname:
+            raise ValueError(
+                "BTCPay server URL needs a full hostname "
+                "(e.g. btcpay.example.com, localhost, or host.docker.internal)"
+            )
+        return trimmed
+
+    @field_validator("btcpay_api_key", "btcpay_store_id")
+    @classmethod
+    def trim_btcpay_credential(cls, value: str | None) -> str | None:
+        # Trim; blank means "not provided" and never wipes a stored value.
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
+
+    @field_validator("btcpay_store_id")
+    @classmethod
+    def limit_store_id_length(cls, value: str | None) -> str | None:
+        # Column is String(64); reject early instead of failing at the DB.
+        if value is not None and len(value) > 64:
+            raise ValueError("BTCPay store ID must be 64 characters or fewer")
+        return value
 
     @field_validator("public_slug")
     @classmethod
@@ -86,7 +147,66 @@ class TenantUpdate(BaseModel):
 
 class TenantHealth(BaseModel):
     tenant: TenantResponse
-    lnbits_status: str  # compatibility field: current adapter connection status
+    # Current adapter connection status ("ok" | "unreachable").
+    connection_status: str
+    # Legacy name carrying the same value; kept for wire compatibility.
+    lnbits_status: str
+
+
+class BTCPayConnectionTest(BaseModel):
+    """Granular result of the read-only BTCPay connection probe.
+
+    ``auth_ok`` / ``store_found`` are None when an earlier step already failed
+    (never evaluated). ``detail`` is one actionable sentence and must never
+    contain credentials.
+    """
+
+    url_reachable: bool
+    auth_ok: bool | None = None
+    store_found: bool | None = None
+    ok: bool
+    detail: str
+
+
+class BTCPayAuthorizeUrl(BaseModel):
+    authorize_url: str
+    permissions: list[str]
+
+
+class TenantStatusActiveRule(BaseModel):
+    name: str
+    version: int
+
+
+class TenantStatusResponse(BaseModel):
+    """Aggregate pipeline health for the dashboard's status strip.
+
+    Read-only snapshot: is the store reachable, is the webhook verified, which
+    rule is active, are payouts flowing, and is the public page on.
+    """
+
+    store: str  # "not_configured" | "unreachable" | "ok"
+    webhook: str  # "not_configured" | "waiting" | "verified"
+    active_rule: TenantStatusActiveRule | None = None
+    payout_delivery: str  # "idle" | "delivering" | "waiting_in_btcpay" | "failing"
+    # Whether a Lightning payout processor is configured in BTCPay to auto-send
+    # payouts. Only probed when store == "ok"; "unknown" when the key can't read
+    # processors or the store isn't reachable.
+    lightning_payout_processor: str = "unknown"  # "active" | "missing" | "unknown"
+    public_page: str  # "off" | "on"
+
+
+class BTCPayWebhookSecret(BaseModel):
+    """One-time reveal of a freshly generated webhook secret.
+
+    The ONLY response that ever carries the raw secret — every other endpoint
+    is bound by the redaction contract (``btcpay_webhook_secret_set`` /
+    ``last_webhook_at`` are the only readable traces).
+    """
+
+    secret: str
+    webhook_url: str
+    events: list[str]
 
 
 # ── Split Rules ───────────────────────────────────────────────────────────
@@ -207,6 +327,9 @@ class PaymentSplitResponse(BaseModel):
     ln_address: str | None = None
     amount_sats: int
     status: str
+    # BTCPay's raw payout state ("AwaitingPayment", ...) from the last
+    # reconciliation check; None until the first check lands.
+    btcpay_payout_state: str | None = None
     payout_id: str | None = None
     failure_reason: str | None = None
     retry_count: int = 0
@@ -293,6 +416,9 @@ class ProofSplitResponse(BaseModel):
     percentage: float | None = None
     amount_sats: int
     payout_status: str
+    # Raw BTCPay payout state from the last reconciliation check (see
+    # PaymentSplitResponse.btcpay_payout_state).
+    btcpay_payout_state: str | None = None
     payout_id: str | None = None  # internal/private endpoint only
 
 

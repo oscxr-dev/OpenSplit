@@ -10,7 +10,12 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
 import { cn, formatDateShort, formatFiat, formatSats, payoutStatusLabel } from '@/lib/utils';
-import { completedSummary, isDemoHistoryPayment, paymentPayoutStatus } from '@/lib/payments';
+import {
+  completedSummary,
+  isDemoHistoryPayment,
+  paymentIsWaitingInBtcpay,
+  paymentPayoutStatus,
+} from '@/lib/payments';
 import type { Invoice, PaymentSplit } from '@/types/api';
 
 const COUNT_OPTIONS = [5, 10, 15, 21] as const;
@@ -116,6 +121,7 @@ export function PaymentsPanel() {
           <div className="divide-y divide-white/[0.06]">
             {visiblePayments.map((payment) => {
               const status = paymentPayoutStatus(payment);
+              const waitingInBtcpay = paymentIsWaitingInBtcpay(payment);
               const fiat = formatFiat(payment.fiat_amount, payment.fiat_currency);
               return (
                 <button
@@ -135,7 +141,11 @@ export function PaymentsPanel() {
                       <p className="font-mono font-semibold text-[#F5F5F7]">{formatSats(payment.amount_sats)}</p>
                       {fiat && <p className="mt-0.5 font-mono text-xs text-[#94A3B8]">{fiat}</p>}
                     </div>
-                    <Badge>{payoutStatusLabel(status)}</Badge>
+                    {waitingInBtcpay ? (
+                      <Badge variant="warning">Waiting in BTCPay</Badge>
+                    ) : (
+                      <Badge>{payoutStatusLabel(status)}</Badge>
+                    )}
                   </div>
                 </button>
               );
