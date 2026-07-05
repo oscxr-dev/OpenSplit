@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend:
+    name: backend (pytest + Postgres)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: opensplit
+          POSTGRES_PASSWORD: opensplit
+          POSTGRES_DB: orchestrator
+        ports:
+          - 5432:5432
+        # Wait until Postgres is accepting connections before any job step runs.
+        options: >-
+          --health-cmd "pg_isready -U opensplit -d orchestrator"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The DB-backed tests derive their own database name by replacing the last
+      # path segment of this URL with `orchestrator_test`, and build the schema
+      # themselves via Base.metadata.create_all — no Alembic run is needed here.
+      ORCHESTRATOR_DB_URL: postgresql+asyncpg://opensplit:opensplit@localhost:5432/orchestrator
+
+    defaults:
+      run:
+        working-directory: orchestrator
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: orchestrator/pyproject.toml
+
+      - name: Install orchestrator with dev extras
+        # pytest, pytest-asyncio, pytest-cov and hypothesis come from [dev];
+        # httpx and asyncpg are already runtime dependencies, so the full test
+        # import set is covered by this single install.
+        run: pip install -e ".[dev]"
+
+      - name: Create the orchestrator_test database
+        # The suite creates its own tables but expects this database to exist.
+        env:
+          PGPASSWORD: opensplit
+        run: psql -h localhost -U opensplit -d orchestrator -c "CREATE DATABASE orchestrator_test;"
+
+      - name: Run pytest
+        # test_api.py::test_health is a live end-to-end probe that expects a
+        # running orchestrator on localhost:8000; it is the only test not gated
+        # by a skip, so it is deselected here. The remaining test_api.py cases
+        # skip cleanly without ORCHESTRATOR_TEST_PASSWORD.
+        run: pytest -q --deselect tests/test_api.py::test_health
+
+  frontend:
+    name: frontend (vitest + build)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build
+        run: npm run build

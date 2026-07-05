@@ -1,5 +1,7 @@
 # OpenSplit
 
+[![CI](https://github.com/oscxr-dev/OpenSplit/actions/workflows/ci.yml/badge.svg)](https://github.com/oscxr-dev/OpenSplit/actions/workflows/ci.yml)
+
 OpenSplit is a self-hosted, **non-custodial Bitcoin revenue-sharing** app with a
 **public proof dashboard**, built on **BTCPay Server**. It's for teams,
 businesses, and communities that receive Bitcoin payments and need to split them
