@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 // jsdom does not implement <dialog> methods used by ConfirmDialog.
 beforeAll(() => {
@@ -13,6 +13,13 @@ beforeAll(() => {
 });
 
 const TENANT_ID = '4f0c2f9e-9d3a-4b7c-8e21-6a5f0d1c2b3a';
+
+// Hoisted, mutable test state so individual tests can vary the tenant flags
+// (public proof on/off, amounts on/off) and assert on the PATCH spy.
+const h = vi.hoisted(() => ({
+  patch: vi.fn(),
+  tenantOverrides: {} as Record<string, unknown>,
+}));
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
@@ -30,12 +37,14 @@ vi.mock('@/hooks/useAuth', () => ({
         brand_logo_url: null,
         public_slug: 'coffee',
         public_transparency_enabled: false,
+        public_show_amounts: false,
         btcpay_url: 'https://btcpay.local',
         btcpay_store_id: 'store-1',
         btcpay_api_key_set: true,
         btcpay_api_key_last4: '9F3A',
         active: true,
         created_at: '2026-01-01T00:00:00Z',
+        ...h.tenantOverrides,
       },
       connection_status: 'ok',
       lnbits_status: 'ok',
@@ -53,7 +62,7 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn(), removeQueries: vi.fn() }),
 }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
-vi.mock('@/lib/api', () => ({ default: { patch: vi.fn(), get: vi.fn(), post: vi.fn() } }));
+vi.mock('@/lib/api', () => ({ default: { patch: h.patch, get: vi.fn(), post: vi.fn() } }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 // The relocated pipeline-health strip pulls in react-router's Link and the
 // tenant-status query; it has its own tests, so stub it here to keep these
@@ -61,6 +70,12 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/components/team/StatusStrip', () => ({ StatusStrip: () => null }));
 
 import { SettingsPage } from './SettingsPage';
+
+beforeEach(() => {
+  h.tenantOverrides = {};
+  h.patch.mockReset();
+  h.patch.mockResolvedValue({ data: { public_slug: 'coffee' } });
+});
 
 afterEach(() => {
   cleanup();
@@ -144,6 +159,84 @@ describe('SettingsPage stale branding (P-F)', () => {
 
     fireEvent.click(screen.getByRole('tab', { name: 'Store' }));
     expect((screen.getByLabelText('Store or team name') as HTMLInputElement).value).toBe('Coffee Co');
+  });
+});
+
+describe('SettingsPage public amounts toggle', () => {
+  const AMOUNTS_TOGGLE = 'Show amounts on the public page';
+  const CONFIRM_TITLE = 'Show amounts publicly?';
+
+  function openPublicPage() {
+    fireEvent.click(screen.getByRole('tab', { name: 'Public page' }));
+  }
+
+  function amountsToggle() {
+    return screen.getByRole('button', { name: AMOUNTS_TOGGLE });
+  }
+
+  function amountsConfirmDialog() {
+    return screen.getByText(CONFIRM_TITLE).closest('dialog');
+  }
+
+  it('reflects the saved OFF state (default) as an Off, enabled-only-when-published toggle', () => {
+    // Master proof off + amounts off (the privacy-safe default).
+    render(<SettingsPage />);
+    openPublicPage();
+
+    const toggle = amountsToggle();
+    expect(toggle.textContent).toBe('Off');
+    // Gated under the master proof toggle: paused/disabled while proof is off.
+    expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Amount visibility is paused/)).toBeTruthy();
+  });
+
+  it('reflects the saved ON state when published and amounts are enabled', () => {
+    h.tenantOverrides = { public_transparency_enabled: true, public_show_amounts: true };
+    render(<SettingsPage />);
+    openPublicPage();
+
+    const toggle = amountsToggle();
+    expect(toggle.textContent).toBe('On');
+    expect((toggle as HTMLButtonElement).disabled).toBe(false);
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('does nothing when clicked while public proof is off', () => {
+    render(<SettingsPage />);
+    openPublicPage();
+
+    fireEvent.click(amountsToggle());
+    expect(h.patch).not.toHaveBeenCalled();
+    expect(amountsConfirmDialog()?.open).toBeFalsy();
+  });
+
+  it('opens a confirm dialog on the ON path, then PATCHes only after confirming', async () => {
+    h.tenantOverrides = { public_transparency_enabled: true, public_show_amounts: false };
+    render(<SettingsPage />);
+    openPublicPage();
+
+    // Turning ON must not write until the user confirms.
+    fireEvent.click(amountsToggle());
+    expect(h.patch).not.toHaveBeenCalled();
+    expect(amountsConfirmDialog()?.open).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Show amounts' }));
+    await waitFor(() =>
+      expect(h.patch).toHaveBeenCalledWith('/tenants/me', { public_show_amounts: true })
+    );
+  });
+
+  it('applies OFF immediately without a confirm dialog', async () => {
+    h.tenantOverrides = { public_transparency_enabled: true, public_show_amounts: true };
+    render(<SettingsPage />);
+    openPublicPage();
+
+    fireEvent.click(amountsToggle());
+    await waitFor(() =>
+      expect(h.patch).toHaveBeenCalledWith('/tenants/me', { public_show_amounts: false })
+    );
+    // Re-hiding is not a privacy risk, so no confirmation is shown.
+    expect(amountsConfirmDialog()?.open).toBeFalsy();
   });
 });
 

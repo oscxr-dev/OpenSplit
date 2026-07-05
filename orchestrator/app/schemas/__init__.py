@@ -39,6 +39,9 @@ class TenantResponse(BaseModel):
     brand_logo_url: str | None = None
     public_slug: str | None = None
     public_transparency_enabled: bool = False
+    # Per-tenant display preference, NOT a secret — safe to expose so the UI can
+    # reflect the saved toggle. Amounts stay private by default (Privacy P1).
+    public_show_amounts: bool = False
     public_country: str | None = None
     public_city: str | None = None
     # BTCPay connection — REDACTION CONTRACT: the raw btcpay_api_key and
@@ -69,6 +72,7 @@ class TenantUpdate(BaseModel):
     lnbits_url: str | None = None
     public_slug: str | None = None
     public_transparency_enabled: bool | None = None
+    public_show_amounts: bool | None = None
     public_country: str | None = None
     public_city: str | None = None
     btcpay_url: str | None = None

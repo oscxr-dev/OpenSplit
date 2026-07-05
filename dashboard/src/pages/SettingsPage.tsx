@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Check, Globe2, Info, Link2, LogOut, MapPin, Moon, ShieldCheck, Store, Sun } from 'lucide-react';
+import { Check, Coins, Globe2, Info, Link2, LogOut, MapPin, Moon, ShieldCheck, Store, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -91,11 +91,14 @@ export function SettingsPage() {
   const navigate = useNavigate();
   const [confirmPublicProofOpen, setConfirmPublicProofOpen] = useState(false);
   const [savingPublicProof, setSavingPublicProof] = useState(false);
+  const [confirmShowAmountsOpen, setConfirmShowAmountsOpen] = useState(false);
+  const [savingShowAmounts, setSavingShowAmounts] = useState(false);
   const [showPublicRulesOnly, setShowPublicRulesOnly] = useState(false);
   // Display name comes from tenant.name only — brand_display_name is a dormant
   // column and must not surface anywhere (stale "BitCrew" branding, P-F).
   const publicSlug = tenant?.tenant.public_slug || slugify(tenant?.tenant.name || 'OpenSplit');
   const publicPageOn = Boolean(tenant?.tenant.public_transparency_enabled);
+  const showAmountsOn = Boolean(tenant?.tenant.public_show_amounts);
   const publicRules = splitRules.filter((rule) => rule.public_enabled);
   const displayedPublicRules = showPublicRulesOnly ? publicRules : splitRules;
 
@@ -261,6 +264,29 @@ export function SettingsPage() {
     } finally {
       setSavingPublicProof(false);
       setConfirmPublicProofOpen(false);
+    }
+  }
+
+  // Amounts on the public page (tenant.public_show_amounts). Off by default and
+  // privacy-safe: visitors see split percentages and activity, never sat amounts
+  // or totals. Turning it ON is the only privacy-loosening move, so it requires
+  // explicit confirmation; turning it OFF re-hides immediately.
+  async function saveShowAmounts(nextValue: boolean) {
+    if (nextValue === showAmountsOn) return;
+    setSavingShowAmounts(true);
+    try {
+      await patchTenantSettings(
+        { public_show_amounts: nextValue },
+        {
+          success: nextValue ? 'Amounts now visible on the public page' : 'Amounts hidden on the public page',
+          nextSlug: savedSlug,
+        }
+      );
+    } catch {
+      toast.error('Could not update amount visibility');
+    } finally {
+      setSavingShowAmounts(false);
+      setConfirmShowAmountsOpen(false);
     }
   }
 
@@ -637,6 +663,67 @@ export function SettingsPage() {
                   </div>
                 </div>
               </div>
+
+              <div className="border-t border-white/[0.07] p-6 sm:p-8">
+                <div
+                  className={cn(
+                    'public-amounts-panel rounded-3xl border p-5 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] transition sm:p-6',
+                    publicPageOn
+                      ? 'border-white/[0.08] bg-white/[0.025]'
+                      : 'public-amounts-panel-off border-white/[0.06] bg-white/[0.015]'
+                  )}
+                >
+                  <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:text-left">
+                    <div>
+                      <div className="flex items-center justify-center gap-3 sm:justify-start">
+                        <Coins className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
+                        <h2 className="font-semibold text-[#F5F5F7]">Show amounts on the public page</h2>
+                        <InfoTip>
+                          Off by default. When off, visitors see split percentages and activity, never sat amounts or your total sats moved.
+                        </InfoTip>
+                      </div>
+                      <p className="mt-3 max-w-md text-sm leading-6 text-[#94A3B8]">
+                        {showAmountsOn
+                          ? 'On — every public visitor can see the sat amount of each payment and your total sats moved.'
+                          : 'Off — visitors see split percentages and activity, never sat amounts or totals.'}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!publicPageOn) return;
+                        if (showAmountsOn) {
+                          void saveShowAmounts(false);
+                          return;
+                        }
+                        setConfirmShowAmountsOpen(true);
+                      }}
+                      className={cn(
+                        'public-amounts-toggle inline-flex min-h-10 min-w-24 items-center justify-center rounded-full border px-5 text-sm font-semibold transition',
+                        !publicPageOn && 'cursor-not-allowed',
+                        publicPageOn && showAmountsOn
+                          ? 'public-amounts-toggle-on border-orange-300/50 bg-orange-500 text-white shadow-[0_0_0_4px_rgba(249,115,22,0.10)]'
+                          : publicPageOn
+                            ? 'border-white/[0.16] bg-white text-[#11131F] hover:bg-white/90'
+                            : 'border-white/[0.10] bg-white/[0.06] text-[#94A3B8]'
+                      )}
+                      aria-pressed={publicPageOn && showAmountsOn}
+                      aria-label="Show amounts on the public page"
+                      disabled={!publicPageOn || savingShowAmounts}
+                      title={!publicPageOn ? 'Turn Public proof on first' : undefined}
+                    >
+                      {showAmountsOn ? 'On' : 'Off'}
+                    </button>
+                  </div>
+
+                  {!publicPageOn && (
+                    <div className="public-amounts-paused mt-4 rounded-2xl border border-orange-300/20 bg-orange-400/[0.08] px-4 py-3 text-sm font-medium text-orange-100">
+                      Public proof is Off. Amount visibility is paused — turn Public proof on to change it.
+                    </div>
+                  )}
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -711,6 +798,21 @@ export function SettingsPage() {
           <span className="rounded-full bg-[#FF2D78]/12 px-3 py-1 text-xs font-semibold text-[#FF2D78]">Public</span>
         </div>
       </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmShowAmountsOpen}
+        logoSrc="/brand/OpenSplit-navbar.svg"
+        title="Show amounts publicly?"
+        description="This makes every public visitor able to see the sat amount of each payment and your total sats moved. Continue?"
+        cancelLabel="Cancel"
+        confirmLabel="Show amounts"
+        loading={savingShowAmounts}
+        confirmDisabled={savingShowAmounts}
+        onClose={() => setConfirmShowAmountsOpen(false)}
+        onConfirm={() => {
+          void saveShowAmounts(true);
+        }}
+      />
 
       <Button
         variant="ghost"

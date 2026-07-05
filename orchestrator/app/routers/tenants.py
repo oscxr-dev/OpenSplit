@@ -157,6 +157,8 @@ async def update_my_tenant(
         tenant.public_slug = body.public_slug
     if body.public_transparency_enabled is not None:
         tenant.public_transparency_enabled = body.public_transparency_enabled
+    if body.public_show_amounts is not None:
+        tenant.public_show_amounts = body.public_show_amounts
     if body.public_country is not None:
         tenant.public_country = body.public_country
     if body.public_city is not None:
