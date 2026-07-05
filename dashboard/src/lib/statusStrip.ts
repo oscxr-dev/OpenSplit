@@ -26,14 +26,32 @@ export interface StatusStripItem {
   anchor?: string;
   /** Optional one-line hint rendered as a tooltip. */
   hint?: string;
+  /** Actionable callout rendered beneath the strip — currently only for a
+   *  missing Lightning payout processor. */
+  guidance?: StatusStripGuidance;
+}
+
+export interface StatusStripGuidance {
+  /** One-line plain-language explainer. */
+  text: string;
+  /** Label for the deep-link button. */
+  fixLabel: string;
+  /** External BTCPay URL the button opens (browser-rewritten). */
+  fixHref: string;
 }
 
 /** Element id the rule-board section is tagged with on the Team page. */
 export const RULE_BOARD_ANCHOR = 'rule-board';
 
+/** Shown when BTCPay has no Lightning payout processor — payouts then wait for
+ *  a manual send until the operator enables one. */
+export const MISSING_PROCESSOR_EXPLAINER =
+  'Payouts wait for manual sending — enable a Lightning payout processor to automate them';
+export const SETUP_AUTOSEND_LABEL = 'Set up auto-send in BTCPay';
+
 export function statusStripItems(
   status: TenantStatus,
-  opts: { payoutsUrl: string | null }
+  opts: { payoutsUrl: string | null; payoutProcessorsUrl: string | null }
 ): StatusStripItem[] {
   const store: StatusStripItem = {
     key: 'store',
@@ -73,6 +91,17 @@ export function statusStripItems(
         : status.payout_delivery === 'delivering'
           ? { tone: 'ok', label: 'Delivering payouts' }
           : { tone: 'idle', label: 'Payouts idle' }),
+    // Only guide when we KNOW the processor is missing — never on "unknown" or
+    // "active", so a key that can't read processors doesn't nag.
+    ...(status.lightning_payout_processor === 'missing' && opts.payoutProcessorsUrl
+      ? {
+          guidance: {
+            text: MISSING_PROCESSOR_EXPLAINER,
+            fixLabel: SETUP_AUTOSEND_LABEL,
+            fixHref: opts.payoutProcessorsUrl,
+          },
+        }
+      : {}),
   };
 
   const publicPage: StatusStripItem = {

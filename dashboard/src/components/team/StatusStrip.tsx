@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenantStatus } from '@/hooks/useTenantStatus';
-import { btcpayPayoutsUrl } from '@/lib/payments';
+import { btcpayPayoutProcessorsUrl, btcpayPayoutsUrl } from '@/lib/payments';
 import { statusStripItems, type StatusStripItem, type StatusTone } from '@/lib/statusStrip';
 import { cn } from '@/lib/utils';
 
@@ -66,19 +66,40 @@ export function StatusStrip() {
     tenant?.tenant.btcpay_store_id,
     window.location.hostname
   );
-  const items = statusStripItems(status, { payoutsUrl });
+  const payoutProcessorsUrl = btcpayPayoutProcessorsUrl(
+    tenant?.tenant.btcpay_url,
+    tenant?.tenant.btcpay_store_id,
+    window.location.hostname
+  );
+  const items = statusStripItems(status, { payoutsUrl, payoutProcessorsUrl });
+  const guidance = items.find((item) => item.guidance)?.guidance;
 
   return (
-    <nav
-      aria-label="Pipeline status"
-      className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.07] bg-[#11131F]/48 p-2.5"
-    >
-      {items.map((item) => (
-        <ItemShell key={item.key} item={item}>
-          <Dot tone={item.tone} />
-          <span className="max-w-[200px] truncate">{item.label}</span>
-        </ItemShell>
-      ))}
-    </nav>
+    <div className="flex flex-col gap-2">
+      <nav
+        aria-label="Pipeline status"
+        className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.07] bg-[#11131F]/48 p-2.5"
+      >
+        {items.map((item) => (
+          <ItemShell key={item.key} item={item}>
+            <Dot tone={item.tone} />
+            <span className="max-w-[200px] truncate">{item.label}</span>
+          </ItemShell>
+        ))}
+      </nav>
+      {guidance && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-amber-300/20 bg-amber-300/[0.06] px-3 py-2.5 text-sm text-[#C7CEDA]">
+          <span className="flex-1">{guidance.text}</span>
+          <a
+            href={guidance.fixHref}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex shrink-0 items-center rounded-lg border border-amber-300/30 bg-amber-300/10 px-3 py-1.5 font-medium text-amber-200 transition-colors hover:bg-amber-300/20"
+          >
+            {guidance.fixLabel}
+          </a>
+        </div>
+      )}
+    </div>
   );
 }

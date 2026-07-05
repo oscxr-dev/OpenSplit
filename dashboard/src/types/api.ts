@@ -245,6 +245,10 @@ export interface TenantStatus {
   webhook: 'not_configured' | 'waiting' | 'verified';
   active_rule: { name: string; version: number } | null;
   payout_delivery: 'idle' | 'delivering' | 'waiting_in_btcpay' | 'failing';
+  /** Whether BTCPay has a Lightning payout processor configured to auto-send
+   *  payouts. "unknown" when the store isn't reachable or the API key can't
+   *  read processors — never nag in that case. */
+  lightning_payout_processor: 'active' | 'missing' | 'unknown';
   public_page: 'off' | 'on';
 }
 

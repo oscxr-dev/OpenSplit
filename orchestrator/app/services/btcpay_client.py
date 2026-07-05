@@ -162,6 +162,28 @@ class BTCPayClient:
         r.raise_for_status()
         return r.json()
 
+    # ── Payout processors (read-only diagnostic) ───────────────────────
+    async def get_payout_processors(self) -> list[dict] | None:
+        """GET the store's configured payout processors (read-only).
+
+        Returns the parsed list, or ``None`` on any failure — 404, a permission
+        error (the minimal API key may lack this read), a non-200, malformed
+        JSON, or an unreachable server. "Can't tell" must be None, never an
+        empty list: an empty list means "reachable, none configured".
+        """
+        try:
+            client = await self._get_client()
+            r = await client.get(
+                f"{self.base_url}/api/v1/stores/{self.store_id}/payout-processors",
+                headers=self._headers(),
+            )
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            return data if isinstance(data, list) else None
+        except Exception:
+            return None
+
     # ── Health ──────────────────────────────────────────────────────────
     async def get_store_response(self) -> httpx.Response:
         """GET the store without raising on HTTP errors — callers inspect the

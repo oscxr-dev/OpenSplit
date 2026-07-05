@@ -185,6 +185,10 @@ class TenantStatusResponse(BaseModel):
     webhook: str  # "not_configured" | "waiting" | "verified"
     active_rule: TenantStatusActiveRule | None = None
     payout_delivery: str  # "idle" | "delivering" | "waiting_in_btcpay" | "failing"
+    # Whether a Lightning payout processor is configured in BTCPay to auto-send
+    # payouts. Only probed when store == "ok"; "unknown" when the key can't read
+    # processors or the store isn't reachable.
+    lightning_payout_processor: str = "unknown"  # "active" | "missing" | "unknown"
     public_page: str  # "off" | "on"
 
 

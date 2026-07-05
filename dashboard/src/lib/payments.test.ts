@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  btcpayPayoutProcessorsUrl,
   btcpayPayoutsUrl,
   isWaitingInBtcpay,
   paymentIsWaitingInBtcpay,
@@ -102,5 +103,24 @@ describe('btcpayPayoutsUrl', () => {
   it('returns null when the connection is not configured', () => {
     expect(btcpayPayoutsUrl(null, 'store-1', 'localhost')).toBeNull();
     expect(btcpayPayoutsUrl('https://btcpay.example.com', null, 'localhost')).toBeNull();
+  });
+});
+
+describe('btcpayPayoutProcessorsUrl', () => {
+  it('builds the payout-processors settings URL and rewrites host.docker.internal', () => {
+    expect(
+      btcpayPayoutProcessorsUrl('http://host.docker.internal:3003', 'store-abc', 'localhost')
+    ).toBe('http://localhost:3003/stores/store-abc/settings/payout-processors');
+  });
+
+  it('leaves reachable hosts untouched and trims a trailing slash', () => {
+    expect(
+      btcpayPayoutProcessorsUrl('https://btcpay.example.com/', 'store-1', 'localhost')
+    ).toBe('https://btcpay.example.com/stores/store-1/settings/payout-processors');
+  });
+
+  it('returns null when the connection is not configured', () => {
+    expect(btcpayPayoutProcessorsUrl(null, 'store-1', 'localhost')).toBeNull();
+    expect(btcpayPayoutProcessorsUrl('https://btcpay.example.com', null, 'localhost')).toBeNull();
   });
 });

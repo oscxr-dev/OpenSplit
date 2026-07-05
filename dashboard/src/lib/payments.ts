@@ -44,6 +44,23 @@ export function btcpayPayoutsUrl(
   return toBrowserUrl(`${base}/stores/${storeId}/payouts`, browserHostname);
 }
 
+/** Browser-openable link to a store's BTCPay payout-processors settings screen
+ *  (host.docker.internal rewritten), or null when the connection isn't set. This
+ *  is where the operator enables the Lightning payout processor that auto-sends
+ *  payouts. */
+export function btcpayPayoutProcessorsUrl(
+  btcpayUrl: string | null | undefined,
+  storeId: string | null | undefined,
+  browserHostname: string
+): string | null {
+  if (!btcpayUrl || !storeId) return null;
+  const base = btcpayUrl.replace(/\/+$/, '');
+  return toBrowserUrl(
+    `${base}/stores/${storeId}/settings/payout-processors`,
+    browserHostname
+  );
+}
+
 /** Roll a payment's per-split statuses up into a single payout status. */
 export function paymentPayoutStatus(payment: Invoice): string {
   if (payment.splits.some((split) => split.status === 'failed')) return 'failed';

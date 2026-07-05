@@ -23,6 +23,7 @@ from app.config import settings
 from app.models import Base, Payment, PaymentSplit, SplitRule, SplitTarget, Tenant
 from app.routers.tenants import (
     SplitDeliveryFact,
+    compute_lightning_payout_processor,
     compute_payout_delivery,
     compute_store_status,
     compute_webhook_status,
@@ -93,6 +94,28 @@ def test_payout_delivery_old_failure_does_not_count():
     assert compute_payout_delivery(facts, NOW) == "idle"
 
 
+def test_lightning_payout_processor_active():
+    assert compute_lightning_payout_processor(
+        [{"name": "Lightning", "payoutMethodId": "BTC-LightningNetwork"}]
+    ) == "active"
+    # Older builds key it as ``paymentMethod``.
+    assert compute_lightning_payout_processor(
+        [{"paymentMethod": "BTC-LightningNetwork"}]
+    ) == "active"
+
+
+def test_lightning_payout_processor_missing_when_empty_or_other_method():
+    assert compute_lightning_payout_processor([]) == "missing"
+    assert compute_lightning_payout_processor(
+        [{"name": "OnChain", "payoutMethodId": "BTC-CHAIN"}]
+    ) == "missing"
+
+
+def test_lightning_payout_processor_unknown_when_none():
+    # None = the list couldn't be read (permission/404/unreachable) — never guess.
+    assert compute_lightning_payout_processor(None) == "unknown"
+
+
 # ── Endpoint scenarios (DB-backed) ──────────────────────────────────────────
 
 
@@ -114,19 +137,25 @@ async def Session(engine):
 
 
 class FakePingClient:
-    def __init__(self, reachable: bool, **kwargs):
+    def __init__(self, reachable: bool, processors=None, **kwargs):
         self._reachable = reachable
+        self._processors = processors
 
     async def ping(self) -> bool:
         return self._reachable
+
+    async def get_payout_processors(self):
+        return self._processors
 
     async def close(self) -> None:
         pass
 
 
-def _mock_ping(monkeypatch, reachable: bool):
+def _mock_ping(monkeypatch, reachable: bool, processors=None):
     monkeypatch.setattr(
-        tenants_mod, "BTCPayClient", lambda *a, **k: FakePingClient(reachable)
+        tenants_mod,
+        "BTCPayClient",
+        lambda *a, **k: FakePingClient(reachable, processors=processors),
     )
 
 
@@ -279,3 +308,83 @@ async def test_status_recent_failure(Session, monkeypatch):
         resp = await get_tenant_status(current_user=None, tenant=tenant, session=s)
 
     assert resp.payout_delivery == "failing"
+
+
+@pytest.mark.asyncio
+async def test_status_lightning_processor_active(Session, monkeypatch):
+    tenant_id = await _seed_tenant(
+        Session,
+        btcpay_url="https://btcpay.local", btcpay_api_key="k", btcpay_store_id="store-1",
+    )
+    _mock_ping(
+        monkeypatch, True,
+        processors=[{"payoutMethodId": "BTC-LightningNetwork"}],
+    )
+
+    async with Session() as s:
+        tenant = await _get_tenant(s, tenant_id)
+        resp = await get_tenant_status(current_user=None, tenant=tenant, session=s)
+
+    assert resp.store == "ok"
+    assert resp.lightning_payout_processor == "active"
+
+
+@pytest.mark.asyncio
+async def test_status_lightning_processor_missing(Session, monkeypatch):
+    tenant_id = await _seed_tenant(
+        Session,
+        btcpay_url="https://btcpay.local", btcpay_api_key="k", btcpay_store_id="store-1",
+    )
+    _mock_ping(monkeypatch, True, processors=[])
+
+    async with Session() as s:
+        tenant = await _get_tenant(s, tenant_id)
+        resp = await get_tenant_status(current_user=None, tenant=tenant, session=s)
+
+    assert resp.lightning_payout_processor == "missing"
+
+
+@pytest.mark.asyncio
+async def test_status_lightning_processor_unknown_when_unreadable(Session, monkeypatch):
+    # Store reachable but the key can't read processors → None → "unknown".
+    tenant_id = await _seed_tenant(
+        Session,
+        btcpay_url="https://btcpay.local", btcpay_api_key="k", btcpay_store_id="store-1",
+    )
+    _mock_ping(monkeypatch, True, processors=None)
+
+    async with Session() as s:
+        tenant = await _get_tenant(s, tenant_id)
+        resp = await get_tenant_status(current_user=None, tenant=tenant, session=s)
+
+    assert resp.lightning_payout_processor == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_status_lightning_processor_unknown_when_store_not_ok(Session, monkeypatch):
+    # Never probe when the store is unreachable — stays "unknown".
+    tenant_id = await _seed_tenant(
+        Session,
+        btcpay_url="https://btcpay.local", btcpay_api_key="k", btcpay_store_id="store-1",
+    )
+    _mock_ping(monkeypatch, False, processors=[{"payoutMethodId": "BTC-LightningNetwork"}])
+
+    async with Session() as s:
+        tenant = await _get_tenant(s, tenant_id)
+        resp = await get_tenant_status(current_user=None, tenant=tenant, session=s)
+
+    assert resp.store == "unreachable"
+    assert resp.lightning_payout_processor == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_status_lightning_processor_unknown_when_store_not_configured(Session, monkeypatch):
+    tenant_id = await _seed_tenant(Session)  # no BTCPay creds
+    _mock_ping(monkeypatch, True)
+
+    async with Session() as s:
+        tenant = await _get_tenant(s, tenant_id)
+        resp = await get_tenant_status(current_user=None, tenant=tenant, session=s)
+
+    assert resp.store == "not_configured"
+    assert resp.lightning_payout_processor == "unknown"

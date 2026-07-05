@@ -39,6 +39,11 @@ RECENT_FAILURE_WINDOW = timedelta(hours=24)
 # Split statuses that need no further delivery work.
 _TERMINAL_SPLIT_STATUSES = {"completed", "failed", "cancelled"}
 
+# BTCPay's payout-method id for Lightning payouts (matches payout_to_ln_address
+# and create_pull_payment). A payout processor tagged with this method is the
+# one that auto-sends OpenSplit's Lightning payouts.
+LIGHTNING_PAYOUT_METHOD_ID = "BTC-LightningNetwork"
+
 # Minimal BTCPay Greenfield permissions OpenSplit actually uses
 # (see services/btcpay_client.py):
 #   cancreateinvoice      → POST /stores/{id}/invoices (POS charges)
@@ -317,6 +322,29 @@ def compute_payout_delivery(facts: list[SplitDeliveryFact], now: datetime) -> st
     return "idle"
 
 
+def compute_lightning_payout_processor(processors: list[dict] | None) -> str:
+    """Roll the store's payout-processor list into an auto-send state.
+
+    - "active"  — a processor for Lightning is configured (payouts auto-send).
+    - "missing" — the list was fetched but has no Lightning processor.
+    - "unknown" — the list couldn't be read (key lacks the permission, store
+                  unreachable, unexpected shape). Never guess "missing" here:
+                  "can't tell" must not read as "definitely not configured".
+
+    BTCPay tags each processor with a payout-method id; older/newer builds have
+    used ``payoutMethodId`` and ``paymentMethod``, so accept either.
+    """
+    if processors is None:
+        return "unknown"
+    for proc in processors:
+        if not isinstance(proc, dict):
+            continue
+        method = proc.get("payoutMethodId") or proc.get("paymentMethod")
+        if method == LIGHTNING_PAYOUT_METHOD_ID:
+            return "active"
+    return "missing"
+
+
 @router.get("/me/status", response_model=TenantStatusResponse)
 async def get_tenant_status(
     current_user: User = Depends(get_current_user),
@@ -331,6 +359,9 @@ async def get_tenant_status(
         tenant.btcpay_url and tenant.btcpay_api_key and tenant.btcpay_store_id
     )
     reachable: bool | None = None
+    # Only probe the payout processor when the store is reachable; otherwise we
+    # genuinely can't tell ("unknown").
+    lightning_payout_processor = "unknown"
     if store_configured:
         client = BTCPayClient(
             tenant.btcpay_url or "",
@@ -340,6 +371,11 @@ async def get_tenant_status(
         )
         try:
             reachable = await client.ping()
+            if reachable:
+                processors = await client.get_payout_processors()
+                lightning_payout_processor = compute_lightning_payout_processor(
+                    processors
+                )
         finally:
             await client.close()
 
@@ -399,5 +435,6 @@ async def get_tenant_status(
         ),
         active_rule=active_rule,
         payout_delivery=compute_payout_delivery(facts, now),
+        lightning_payout_processor=lightning_payout_processor,
         public_page="on" if tenant.public_transparency_enabled else "off",
     )
