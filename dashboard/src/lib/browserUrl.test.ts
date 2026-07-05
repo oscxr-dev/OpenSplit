@@ -1,5 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { isDockerHostUrl, isValidServerUrl, toBrowserUrl } from './browserUrl';
+import { isDockerHostUrl, isValidServerUrl, proofPermalink, toBrowserUrl } from './browserUrl';
+
+describe('proofPermalink', () => {
+  it('builds {origin}/proof/{id} from the browser origin', () => {
+    expect(proofPermalink('https://opensplit.local', 'pay-123')).toBe(
+      'https://opensplit.local/proof/pay-123'
+    );
+    expect(proofPermalink('http://localhost:5173', 'abc-def')).toBe(
+      'http://localhost:5173/proof/abc-def'
+    );
+  });
+
+  it('encodes ids with URL-unsafe characters', () => {
+    expect(proofPermalink('https://opensplit.local', 'a b/c')).toBe(
+      'https://opensplit.local/proof/a%20b%2Fc'
+    );
+  });
+});
 
 describe('toBrowserUrl', () => {
   it('rewrites host.docker.internal to the browser hostname', () => {

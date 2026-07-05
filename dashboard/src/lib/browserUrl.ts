@@ -27,6 +27,14 @@ export function toBrowserUrl(url: string, browserHostname: string): string {
   return parsed.toString();
 }
 
+/** Build the authenticated Split Proof permalink for one payment:
+ *  `{origin}/proof/{paymentId}`. `origin` is normally
+ *  `window.location.origin` (no trailing slash). This is the shareable app URL
+ *  that renders PageProof — not the raw `/payments/{id}/proof` API path. */
+export function proofPermalink(origin: string, paymentId: string): string {
+  return `${origin}/proof/${encodeURIComponent(paymentId)}`;
+}
+
 /** True when `url` parses and its hostname is `host.docker.internal`. */
 export function isDockerHostUrl(url: string): boolean {
   try {

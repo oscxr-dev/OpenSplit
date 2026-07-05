@@ -1,10 +1,12 @@
 import { AlertCircle, CheckCircle, Clock, Copy, ExternalLink, ReceiptText, RotateCcw, ShieldCheck } from 'lucide-react';
+import { toast } from 'sonner';
 import { useProof } from '@/hooks/useProof';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { cn, formatDate, formatSats, payoutStatusLabel } from '@/lib/utils';
+import { cn, copyToClipboard, formatDate, formatSats, payoutStatusLabel } from '@/lib/utils';
 import { btcpayPayoutsUrl, isWaitingInBtcpay, WAITING_IN_BTCPAY_HINT } from '@/lib/payments';
+import { proofPermalink } from '@/lib/browserUrl';
 import { proofBalanceLabel, truncateMiddle } from '@/lib/transparency';
 import type { Invoice, PaymentSplit } from '@/types/api';
 
@@ -22,6 +24,15 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
     tenant?.tenant.btcpay_store_id,
     window.location.hostname
   );
+  // Shareable app permalink to this proof (authenticated PageProof route) —
+  // the receipt footer shows this instead of the raw /payments API path.
+  const proofLink = proofPermalink(window.location.origin, payment.id);
+
+  function handleCopyProofLink() {
+    copyToClipboard(proofLink)
+      .then(() => toast.success('Proof link copied'))
+      .catch(() => toast.error('Could not copy proof link'));
+  }
 
   const proofRows = proof?.members.map((member) => {
     const matchingSplit = payment.splits.find((split) => split.id === member.split_id);
@@ -171,14 +182,21 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
             <p className="mt-1 truncate font-mono text-[#F5F5F7]">{payment.id}</p>
           </div>
           <div className="rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3">
-            <p className="text-[#94A3B8]">Proof source</p>
-            <p className="mt-1 font-mono text-[#F5F5F7]">/payments/{payment.id}/proof</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[#94A3B8]">Proof link</p>
+              <button
+                type="button"
+                onClick={handleCopyProofLink}
+                className="inline-flex shrink-0 items-center gap-1 font-medium text-[#FF2D78] transition-colors hover:text-[#FF6DA6]"
+              >
+                <Copy className="h-3.5 w-3.5" strokeWidth={1.8} />
+                Copy proof link
+              </button>
+            </div>
+            <p className="mt-1 truncate font-mono text-[#F5F5F7]">{proofLink}</p>
           </div>
           <div className="rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3 sm:col-span-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-[#94A3B8]">Balance</p>
-              <Copy className="h-3.5 w-3.5 text-[#94A3B8]" strokeWidth={1.8} />
-            </div>
+            <p className="text-[#94A3B8]">Balance</p>
             <p className="mt-1 font-mono text-[#F5F5F7]">
               {proof
                 ? `${formatSats(proof.integrity.split_sum_sats)} / ${formatSats(proof.integrity.payment_amount_sats)}`
