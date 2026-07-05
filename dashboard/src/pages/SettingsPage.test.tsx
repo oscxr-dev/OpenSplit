@@ -55,6 +55,10 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('react-router-dom', () => ({ useNavigate: () => vi.fn() }));
 vi.mock('@/lib/api', () => ({ default: { patch: vi.fn(), get: vi.fn(), post: vi.fn() } }));
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+// The relocated pipeline-health strip pulls in react-router's Link and the
+// tenant-status query; it has its own tests, so stub it here to keep these
+// SettingsPage tests focused on the tabs/settings behavior.
+vi.mock('@/components/team/StatusStrip', () => ({ StatusStrip: () => null }));
 
 import { SettingsPage } from './SettingsPage';
 

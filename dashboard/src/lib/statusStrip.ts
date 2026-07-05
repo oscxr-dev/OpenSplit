@@ -114,3 +114,26 @@ export function statusStripItems(
 
   return [store, webhook, activeRule, payout, publicPage];
 }
+
+/** Worst-state roll-up of the five checks into a single glanceable summary for
+ *  the Team page pill. Derived from the SAME statusStripItems() tones so the
+ *  compact summary and the full detail strip can never disagree. */
+export type StatusSummaryTone = 'ok' | 'warn' | 'bad';
+
+export interface StatusSummary {
+  tone: StatusSummaryTone;
+  /** Short, glanceable line — "Attention: {reason}" when red, the failing
+   *  check's own label when amber, "Pipeline healthy" when all clear. */
+  label: string;
+}
+
+/** Precedence, worst wins: any bad → red "Attention: …"; else any warn → amber
+ *  with that check's label; else green "Pipeline healthy". Idle checks (nothing
+ *  set up yet) are not failures and never downgrade the summary. */
+export function summarizeStatus(items: StatusStripItem[]): StatusSummary {
+  const bad = items.find((item) => item.tone === 'bad');
+  if (bad) return { tone: 'bad', label: `Attention: ${bad.label}` };
+  const warn = items.find((item) => item.tone === 'warn');
+  if (warn) return { tone: 'warn', label: warn.label };
+  return { tone: 'ok', label: 'Pipeline healthy' };
+}

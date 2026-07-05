@@ -10,6 +10,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { Input } from '@/components/ui/Input';
 import { BtcPayConnectionPanel } from '@/components/settings/BtcPayConnectionPanel';
 import { BtcPayWebhookPanel } from '@/components/settings/BtcPayWebhookPanel';
+import { StatusStrip } from '@/components/team/StatusStrip';
 import { useAuth } from '@/hooks/useAuth';
 import { useSplits, useToggleSplitPublic } from '@/hooks/useSplits';
 import { useTheme } from '@/hooks/useTheme';
@@ -321,7 +322,12 @@ export function SettingsPage() {
       </div>
 
       {activeTab === 'connection' && (
-        <div {...tabPanelProps('connection')}>
+        <div {...tabPanelProps('connection')} className="space-y-6">
+          <div className="space-y-3">
+            <h2 className="font-semibold text-[#F5F5F7]">Pipeline status</h2>
+            <StatusStrip />
+          </div>
+
           <Card>
             <CardContent className="p-0">
               <BtcPayConnectionPanel />

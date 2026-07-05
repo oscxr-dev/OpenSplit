@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { statusStripItems, type StatusStripItem } from './statusStrip';
+import { statusStripItems, summarizeStatus, type StatusStripItem } from './statusStrip';
 import type { TenantStatus } from '@/types/api';
+
+const NO_URLS = { payoutsUrl: null, payoutProcessorsUrl: null };
 
 function base(overrides: Partial<TenantStatus> = {}): TenantStatus {
   return {
@@ -130,5 +132,63 @@ describe('statusStripItems', () => {
     expect(items.webhook.to).toBe('/settings#connection');
     expect(items.active_rule.anchor).toBe('rule-board');
     expect(items.public_page.to).toBe('/settings#public-page');
+  });
+});
+
+describe('summarizeStatus', () => {
+  it('reports "Pipeline healthy" when every check is ok', () => {
+    const summary = summarizeStatus(statusStripItems(base(), NO_URLS));
+    expect(summary).toEqual({ tone: 'ok', label: 'Pipeline healthy' });
+  });
+
+  it('treats an all-idle (nothing set up) pipeline as healthy, not a failure', () => {
+    const summary = summarizeStatus(
+      statusStripItems(
+        base({
+          store: 'not_configured',
+          webhook: 'not_configured',
+          active_rule: null,
+          payout_delivery: 'idle',
+          public_page: 'off',
+        }),
+        NO_URLS
+      )
+    );
+    expect(summary).toEqual({ tone: 'ok', label: 'Pipeline healthy' });
+  });
+
+  it('surfaces a single warning amber with that check\'s own label', () => {
+    const summary = summarizeStatus(statusStripItems(base({ webhook: 'waiting' }), NO_URLS));
+    expect(summary).toEqual({ tone: 'warn', label: 'Webhook waiting' });
+  });
+
+  it('surfaces a failing payout red with an "Attention:" prefix', () => {
+    const summary = summarizeStatus(
+      statusStripItems(base({ payout_delivery: 'failing' }), NO_URLS)
+    );
+    expect(summary).toEqual({ tone: 'bad', label: 'Attention: Payouts failing' });
+  });
+
+  it('lets bad win over warn (worst-state precedence)', () => {
+    // Store unreachable (warn) AND payouts failing (bad): red wins.
+    const summary = summarizeStatus(
+      statusStripItems(base({ store: 'unreachable', payout_delivery: 'failing' }), NO_URLS)
+    );
+    expect(summary.tone).toBe('bad');
+    expect(summary.label).toBe('Attention: Payouts failing');
+  });
+
+  it('lets warn win over ok/idle when no check is bad', () => {
+    // Store unreachable (warn) alongside otherwise-healthy checks: amber wins,
+    // and the label is the first failing check encountered (store).
+    const summary = summarizeStatus(statusStripItems(base({ store: 'unreachable' }), NO_URLS));
+    expect(summary).toEqual({ tone: 'warn', label: 'Store unreachable' });
+  });
+
+  it('reports the amber label for a payout waiting in BTCPay', () => {
+    const summary = summarizeStatus(
+      statusStripItems(base({ payout_delivery: 'waiting_in_btcpay' }), NO_URLS)
+    );
+    expect(summary).toEqual({ tone: 'warn', label: 'Waiting in BTCPay' });
   });
 });

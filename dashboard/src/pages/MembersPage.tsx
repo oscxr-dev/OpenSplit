@@ -7,7 +7,7 @@ import { useInvoices } from '@/hooks/useInvoices';
 import { useSplits } from '@/hooks/useSplits';
 import { TeamMap } from '@/components/team/TeamMap';
 import { SplitRulesSection } from '@/components/team/SplitRulesSection';
-import { StatusStrip } from '@/components/team/StatusStrip';
+import { StatusSummaryPill } from '@/components/team/StatusSummaryPill';
 import { RULE_BOARD_ANCHOR } from '@/lib/statusStrip';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -153,7 +153,7 @@ export function MembersPage() {
 
   return (
     <div className="space-y-8">
-      <StatusStrip />
+      <StatusSummaryPill />
 
       {activeRules.length === 0 ? (
         <EmptyState
