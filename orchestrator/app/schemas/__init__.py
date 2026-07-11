@@ -330,6 +330,11 @@ class PaymentSplitResponse(BaseModel):
     # BTCPay's raw payout state ("AwaitingPayment", ...) from the last
     # reconciliation check; None until the first check lands.
     btcpay_payout_state: str | None = None
+    # Lightning settlement proof recorded when the payout completed —
+    # sha256(ln_preimage) == ln_payment_hash. Verbatim from BTCPay; None for
+    # on-chain/failed/pre-existing payouts. Authenticated responses only.
+    ln_preimage: str | None = None
+    ln_payment_hash: str | None = None
     payout_id: str | None = None
     failure_reason: str | None = None
     retry_count: int = 0
@@ -420,6 +425,10 @@ class ProofSplitResponse(BaseModel):
     # PaymentSplitResponse.btcpay_payout_state).
     btcpay_payout_state: str | None = None
     payout_id: str | None = None  # internal/private endpoint only
+    # Lightning settlement proof (see PaymentSplitResponse.ln_preimage).
+    # Authenticated proof only — never exposed on public pages.
+    ln_preimage: str | None = None
+    ln_payment_hash: str | None = None
 
 
 class ProofIntegrity(BaseModel):

@@ -29,6 +29,29 @@ def map_btcpay_payout_state(state: str | None) -> str:
     return BTCPAY_STATUS_MAP.get(state or "", "in_progress")
 
 
+def extract_ln_settlement(payout: dict) -> tuple[str | None, str | None]:
+    """Pull (preimage, payment_hash) out of a payout's paymentProof, verbatim.
+
+    Real BTCPay responses return the stored Lightning proof blob with
+    PascalCase keys — {"ProofType": "PayoutLightningBlob", "Preimage": ...,
+    "PaymentHash": ...} — while the Greenfield docs render camelCase, so both
+    spellings are accepted. Returns (None, None) for a missing or malformed
+    proof (on-chain payouts, failures); never raises.
+    """
+    proof = payout.get("paymentProof")
+    if not isinstance(proof, dict):
+        return None, None
+
+    def first_str(*keys: str) -> str | None:
+        for key in keys:
+            value = proof.get(key)
+            if isinstance(value, str) and value:
+                return value
+        return None
+
+    return first_str("Preimage", "preimage"), first_str("PaymentHash", "paymentHash")
+
+
 def payout_failure_reason(payout: dict, state: str | None) -> str:
     payment_proof = payout.get("paymentProof")
     metadata = payout.get("metadata")
@@ -77,6 +100,14 @@ async def reconcile_tenant_payouts(session: AsyncSession, tenant: Tenant) -> int
                     split.failure_reason = payout_failure_reason(payout, state)
                 elif next_status == "completed":
                     split.failure_reason = None
+                    # Best-effort settlement proof: stored verbatim when BTCPay
+                    # exposes it, silently absent otherwise — a missing proof
+                    # must never fail reconciliation or change money state.
+                    preimage, payment_hash = extract_ln_settlement(payout)
+                    if preimage:
+                        split.ln_preimage = preimage
+                    if payment_hash:
+                        split.ln_payment_hash = payment_hash
             except Exception as exc:
                 split.last_checked_at = datetime.now(timezone.utc)
                 logger.warning(

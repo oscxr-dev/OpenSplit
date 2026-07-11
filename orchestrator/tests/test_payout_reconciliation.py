@@ -12,10 +12,24 @@ import app.services.payout_reconciliation as reconciliation_mod
 from app.config import settings
 from app.models import Base, Payment, PaymentSplit, SplitRule, SplitTarget, Tenant
 from app.services.payout_reconciliation import (
+    extract_ln_settlement,
     map_btcpay_payout_state,
     payout_failure_reason,
     reconcile_tenant_payouts,
 )
+
+# A real Lightning settlement proof captured from a regtest BTCPay payout
+# (GET /api/v1/stores/{store}/payouts/{id}). Note the PascalCase keys — BTCPay
+# returns the stored proof blob verbatim, unlike the camelCased payout fields.
+REAL_PREIMAGE = "c6aa922406355f1f201daea3e46d451576657016026dfe4872bf47835e08b75e"
+REAL_PAYMENT_HASH = "77850d754d7177072f799a77cf6886f79adc029ecc02a52d781b3959af430ffe"
+REAL_PAYMENT_PROOF = {
+    "Id": REAL_PAYMENT_HASH,
+    "Link": None,
+    "Preimage": REAL_PREIMAGE,
+    "ProofType": "PayoutLightningBlob",
+    "PaymentHash": REAL_PAYMENT_HASH,
+}
 
 _BASE_URL = settings.db_url.rsplit("/", 1)[0]
 TEST_DB_URL = f"{_BASE_URL}/orchestrator_test"
@@ -40,6 +54,55 @@ def test_failure_reason_handles_different_btcpay_shapes():
     assert payout_failure_reason(
         {"paymentProof": "opaque-proof"}, "Cancelled"
     ) == "BTCPay reportó el payout como Cancelled."
+
+
+# ── Lightning settlement proof extraction (pure) ────────────────────────────
+
+
+def test_extract_ln_settlement_from_real_pascalcase_shape():
+    preimage, payment_hash = extract_ln_settlement(
+        {"state": "Completed", "paymentProof": REAL_PAYMENT_PROOF}
+    )
+    assert preimage == REAL_PREIMAGE
+    assert payment_hash == REAL_PAYMENT_HASH
+
+
+def test_extract_ln_settlement_accepts_camelcase_docs_shape():
+    preimage, payment_hash = extract_ln_settlement(
+        {
+            "paymentProof": {
+                "proofType": "PayoutLightningBlob",
+                "preimage": REAL_PREIMAGE,
+                "paymentHash": REAL_PAYMENT_HASH,
+            }
+        }
+    )
+    assert preimage == REAL_PREIMAGE
+    assert payment_hash == REAL_PAYMENT_HASH
+
+
+def test_extract_ln_settlement_none_for_missing_or_malformed_proof():
+    assert extract_ln_settlement({}) == (None, None)
+    assert extract_ln_settlement({"paymentProof": None}) == (None, None)
+    assert extract_ln_settlement({"paymentProof": "opaque-proof"}) == (None, None)
+    # On-chain-style proof without Lightning fields.
+    assert extract_ln_settlement(
+        {"paymentProof": {"proofType": "PayoutTransactionOnChainBlob", "link": "x"}}
+    ) == (None, None)
+    # Non-string values are never persisted.
+    assert extract_ln_settlement(
+        {"paymentProof": {"Preimage": 123, "PaymentHash": ["x"]}}
+    ) == (None, None)
+
+
+def test_real_vector_sha256_preimage_equals_payment_hash():
+    """The verifiable property this feature exists for: the recorded preimage
+    hashes to the recorded payment hash (checked on a real captured vector)."""
+    import hashlib
+
+    assert (
+        hashlib.sha256(bytes.fromhex(REAL_PREIMAGE)).hexdigest() == REAL_PAYMENT_HASH
+    )
 
 
 # ── Raw payout state persistence (DB-backed) ───────────────────────────────
@@ -155,3 +218,101 @@ async def test_reconciliation_stores_none_when_state_absent(Session, monkeypatch
     async with Session() as s:
         split = (await s.execute(select(PaymentSplit).where(PaymentSplit.id == split_id))).scalar_one()
         assert split.btcpay_payout_state is None
+
+
+# ── Lightning settlement proof persistence (DB-backed) ─────────────────────
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_persists_preimage_on_completed_payout(Session, monkeypatch):
+    tenant_id, split_id = await _seed_split_with_payout(Session)
+    monkeypatch.setattr(
+        reconciliation_mod, "BTCPayClient",
+        lambda **kwargs: FakePayoutClient(
+            {"id": "payout-1", "state": "Completed", "paymentProof": REAL_PAYMENT_PROOF}
+        ),
+    )
+
+    async with Session() as s:
+        tenant = (await s.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
+        await reconcile_tenant_payouts(s, tenant)
+
+    async with Session() as s:
+        split = (await s.execute(select(PaymentSplit).where(PaymentSplit.id == split_id))).scalar_one()
+        assert split.status == "completed"
+        # Stored verbatim, exactly as BTCPay returned them.
+        assert split.ln_preimage == REAL_PREIMAGE
+        assert split.ln_payment_hash == REAL_PAYMENT_HASH
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_completed_without_proof_stays_null(Session, monkeypatch):
+    tenant_id, split_id = await _seed_split_with_payout(Session)
+    monkeypatch.setattr(
+        reconciliation_mod, "BTCPayClient",
+        lambda **kwargs: FakePayoutClient({"id": "payout-1", "state": "Completed"}),
+    )
+
+    async with Session() as s:
+        tenant = (await s.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
+        await reconcile_tenant_payouts(s, tenant)
+
+    async with Session() as s:
+        split = (await s.execute(select(PaymentSplit).where(PaymentSplit.id == split_id))).scalar_one()
+        # A missing proof never blocks the money state transition.
+        assert split.status == "completed"
+        assert split.ln_preimage is None
+        assert split.ln_payment_hash is None
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_malformed_proof_never_breaks_completion(Session, monkeypatch):
+    tenant_id, split_id = await _seed_split_with_payout(Session)
+    monkeypatch.setattr(
+        reconciliation_mod, "BTCPayClient",
+        lambda **kwargs: FakePayoutClient(
+            {"id": "payout-1", "state": "Completed", "paymentProof": "opaque-proof"}
+        ),
+    )
+
+    async with Session() as s:
+        tenant = (await s.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
+        await reconcile_tenant_payouts(s, tenant)
+
+    async with Session() as s:
+        split = (await s.execute(select(PaymentSplit).where(PaymentSplit.id == split_id))).scalar_one()
+        assert split.status == "completed"
+        assert split.ln_preimage is None
+        assert split.ln_payment_hash is None
+
+
+class RaisingPayoutClient:
+    """get_payout always fails — simulates BTCPay being unreachable."""
+
+    def __init__(self, **kwargs):
+        pass
+
+    async def get_payout(self, payout_id: str) -> dict:
+        raise RuntimeError("BTCPay unreachable")
+
+    async def close(self) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_survives_payout_fetch_failure(Session, monkeypatch):
+    tenant_id, split_id = await _seed_split_with_payout(Session)
+    monkeypatch.setattr(reconciliation_mod, "BTCPayClient", RaisingPayoutClient)
+
+    async with Session() as s:
+        tenant = (await s.execute(select(Tenant).where(Tenant.id == tenant_id))).scalar_one()
+        # Must not raise; the failure is logged per split.
+        await reconcile_tenant_payouts(s, tenant)
+
+    async with Session() as s:
+        split = (await s.execute(select(PaymentSplit).where(PaymentSplit.id == split_id))).scalar_one()
+        # Money state untouched; only the check timestamp advances.
+        assert split.status == "in_progress"
+        assert split.ln_preimage is None
+        assert split.ln_payment_hash is None
+        assert split.last_checked_at is not None

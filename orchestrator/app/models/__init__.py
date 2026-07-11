@@ -195,6 +195,12 @@ class PaymentSplit(Base):
     # every reconciliation check. Informational only — `status` stays the
     # single source of truth for money logic.
     btcpay_payout_state: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Lightning settlement proof from BTCPay's payout paymentProof, captured
+    # when the payout completes and stored verbatim (never derived here).
+    # sha256(ln_preimage) == ln_payment_hash is independently verifiable.
+    # NULL for on-chain/failed/pre-existing payouts. Informational only.
+    ln_preimage: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ln_payment_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")
     failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)

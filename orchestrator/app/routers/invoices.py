@@ -26,6 +26,8 @@ def _payment_to_response(payment: Payment) -> InvoiceResponse:
                 amount_sats=s.amount_sats,
                 status=s.status,
                 btcpay_payout_state=s.btcpay_payout_state,
+                ln_preimage=s.ln_preimage,
+                ln_payment_hash=s.ln_payment_hash,
                 executed_at=s.executed_at or datetime.min,
             )
             for s in payment.splits

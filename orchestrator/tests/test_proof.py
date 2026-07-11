@@ -113,7 +113,34 @@ def test_proof_carries_member_fields_including_payout():
     assert m.amount_sats == 250
     assert m.payout_status == "in_progress"
     assert m.payout_id == "payout-xyz"
+    # No settlement proof for an in-progress payout — fields default to None.
+    assert m.ln_preimage is None
+    assert m.ln_payment_hash is None
     assert proof.integrity.balanced is True
+
+
+def test_proof_carries_ln_settlement_proof_when_recorded():
+    preimage = "c6aa922406355f1f201daea3e46d451576657016026dfe4872bf47835e08b75e"
+    payment_hash = "77850d754d7177072f799a77cf6886f79adc029ecc02a52d781b3959af430ffe"
+    rows = [
+        _row(
+            amount_sats=250,
+            payout_status="completed",
+            ln_preimage=preimage,
+            ln_payment_hash=payment_hash,
+        )
+    ]
+    proof = build_proof(
+        payment_id=uuid.uuid4(),
+        amount_sats=250,
+        status="paid",
+        split_rule_id=None,
+        split_rule_version=1,
+        rows=rows,
+    )
+    m = proof.members[0]
+    assert m.ln_preimage == preimage
+    assert m.ln_payment_hash == payment_hash
 
 
 def test_proof_with_no_splits_is_unbalanced_unless_zero_amount():

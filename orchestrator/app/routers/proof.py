@@ -39,6 +39,9 @@ class ProofSplitRow:
     amount_sats: int
     payout_status: str
     payout_id: str | None
+    # Lightning settlement proof (verbatim from BTCPay; see PaymentSplit model).
+    ln_preimage: str | None = None
+    ln_payment_hash: str | None = None
 
 
 def build_proof(
@@ -64,6 +67,8 @@ def build_proof(
             amount_sats=row.amount_sats,
             payout_status=row.payout_status,
             payout_id=row.payout_id,
+            ln_preimage=row.ln_preimage,
+            ln_payment_hash=row.ln_payment_hash,
         )
         for row in rows
     ]
@@ -135,6 +140,8 @@ async def get_split_proof(
                 amount_sats=split.amount_sats,
                 payout_status=split.status,
                 payout_id=split.btcpay_payout_id,
+                ln_preimage=split.ln_preimage,
+                ln_payment_hash=split.ln_payment_hash,
             )
         )
 

@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, Clock, Copy, ExternalLink, ReceiptText, RotateCcw, ShieldCheck } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Copy, ExternalLink, ReceiptText, RotateCcw, ShieldCheck, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { useProof } from '@/hooks/useProof';
 import { useAuth } from '@/hooks/useAuth';
@@ -14,6 +14,46 @@ interface SplitProofReceiptProps {
   payment: Invoice;
   onRetrySplit?: (split: PaymentSplit) => void;
   retrying?: boolean;
+}
+
+/** Lightning settlement proof for one completed payout: the preimage BTCPay
+ *  recorded when the payment settled (sha256(preimage) equals the payment
+ *  hash). Shown only for completed splits that have one — it is evidence the
+ *  payout settled on the Lightning Network, not a DB-internal check. */
+function LightningSettlementProof({ preimage, paymentHash }: { preimage: string; paymentHash: string | null }) {
+  function handleCopyPreimage() {
+    copyToClipboard(preimage)
+      .then(() => toast.success('Preimage copied'))
+      .catch(() => toast.error('Could not copy preimage'));
+  }
+
+  return (
+    <div className="mt-2.5 rounded border border-white/[0.07] bg-[#0A0B12]/42 px-2.5 py-2 text-xs">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <span className="flex items-center gap-1.5 font-medium text-[#F5F5F7]">
+          <Zap className="h-3.5 w-3.5 shrink-0 text-[#FF2D78]" strokeWidth={1.8} />
+          Lightning settlement proof
+        </span>
+        <button
+          type="button"
+          onClick={handleCopyPreimage}
+          className="inline-flex shrink-0 items-center gap-1 font-medium text-[#FF2D78] transition-colors hover:text-[#FF6DA6]"
+        >
+          <Copy className="h-3 w-3" strokeWidth={1.8} />
+          Copy preimage
+        </button>
+      </div>
+      <p
+        className="mt-1.5 truncate font-mono text-[#94A3B8]"
+        title="Preimage revealed when the Lightning payment settled — sha256(preimage) equals the payment hash"
+      >
+        preimage {truncateMiddle(preimage, 18, 10)}
+      </p>
+      {paymentHash && (
+        <p className="mt-0.5 truncate font-mono text-[#94A3B8]">hash {truncateMiddle(paymentHash, 18, 10)}</p>
+      )}
+    </div>
+  );
 }
 
 export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: SplitProofReceiptProps) {
@@ -44,6 +84,8 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
       amountSats: member.amount_sats,
       status: member.payout_status,
       rawState: member.btcpay_payout_state ?? matchingSplit?.btcpay_payout_state ?? null,
+      preimage: member.ln_preimage ?? matchingSplit?.ln_preimage ?? null,
+      paymentHash: member.ln_payment_hash ?? matchingSplit?.ln_payment_hash ?? null,
       retrySplit: matchingSplit,
     };
   }) ?? payment.splits.map((split) => ({
@@ -54,6 +96,8 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
     amountSats: split.amount_sats,
     status: split.status,
     rawState: split.btcpay_payout_state ?? null,
+    preimage: split.ln_preimage ?? null,
+    paymentHash: split.ln_payment_hash ?? null,
     retrySplit: split,
   }));
 
@@ -147,6 +191,10 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
                     )}
                   </div>
                 </div>
+
+                {row.status === 'completed' && row.preimage && (
+                  <LightningSettlementProof preimage={row.preimage} paymentHash={row.paymentHash} />
+                )}
 
                 {waiting && (
                   <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded border border-amber-300/15 bg-amber-400/[0.08] px-2.5 py-1.5 text-xs text-amber-200">

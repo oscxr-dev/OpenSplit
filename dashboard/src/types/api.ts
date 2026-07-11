@@ -123,6 +123,11 @@ export interface PaymentSplit {
   /** BTCPay's raw payout state ("AwaitingPayment", ...) from the last
    *  reconciliation check; null until the first check lands. */
   btcpay_payout_state?: string | null;
+  /** Lightning settlement proof recorded when the payout completed —
+   *  sha256(preimage) equals ln_payment_hash. Null for on-chain, failed, or
+   *  pre-existing payouts. Authenticated responses only. */
+  ln_preimage?: string | null;
+  ln_payment_hash?: string | null;
   payout_id: string | null;
   failure_reason: string | null;
   retry_count: number;
@@ -190,6 +195,9 @@ export interface ProofSplit {
   /** Raw BTCPay payout state from the last reconciliation check. */
   btcpay_payout_state?: string | null;
   payout_id: string | null;
+  /** Lightning settlement proof (see PaymentSplit.ln_preimage). */
+  ln_preimage?: string | null;
+  ln_payment_hash?: string | null;
 }
 
 export interface ProofIntegrity {
