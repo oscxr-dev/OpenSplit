@@ -220,14 +220,23 @@ class SplitEngine:
         return records
 
     async def execute_splits_btcpay(
-        self, payment_id: uuid.UUID, btcpay: BTCPayClient
+        self, payment_id: uuid.UUID, btcpay: BTCPayClient, *, resume: bool = False
     ) -> list[PaymentSplit]:
         """For BTCPay tenants: calculate splits AND actively send payouts
         to each target's Lightning address. Records audit trail with the
         payout id and initial status per target. Confirmation is handled by
         the payout reconciliation worker.
 
+        Durability: each target's row is committed BEFORE its BTCPay call
+        (pre-flight marker) and its payout id is committed immediately AFTER,
+        so a crash mid-loop never orphans a created payout and a target with
+        no row provably never had a payout attempted.
+
         Idempotent: if payment already has splits, returns them unchanged.
+        ``resume=True`` re-enters a crashed "in_progress" payment and finishes
+        only the targets without a recorded payout; it replays the rule
+        captured at claim time, never the currently active one. Only call it
+        when no other processor can still be mid-flight for this payment.
         """
         # Lock the row so concurrent processors serialize on the status check.
         result = await self.session.execute(
@@ -239,19 +248,33 @@ class SplitEngine:
 
         # Status leaves "pending" before payouts are sent, so a waiting processor
         # that finds it already claimed must stop here. Commit to release the lock.
-        if payment.status != "pending":
+        # Only an explicit resume may re-enter a claimed-but-unfinished payment.
+        resuming = (
+            resume
+            and payment.status == "in_progress"
+            and payment.split_rule_id is not None
+        )
+        if payment.status != "pending" and not resuming:
             await self.session.commit()
             return payment.splits
 
-        # Find active rule
-        result = await self.session.execute(
-            select(SplitRule)
-            .where(
-                SplitRule.tenant_id == payment.tenant_id, SplitRule.active == True
+        if resuming:
+            # Replay the rule recorded when the payment was claimed, not
+            # whatever rule is active now, so amounts match the original run.
+            result = await self.session.execute(
+                select(SplitRule).where(SplitRule.id == payment.split_rule_id)
             )
-            .order_by(SplitRule.version.desc(), SplitRule.created_at.desc())
-        )
-        rule = result.scalars().first()
+            rule = result.scalar_one()
+        else:
+            # Find active rule
+            result = await self.session.execute(
+                select(SplitRule)
+                .where(
+                    SplitRule.tenant_id == payment.tenant_id, SplitRule.active == True
+                )
+                .order_by(SplitRule.version.desc(), SplitRule.created_at.desc())
+            )
+            rule = result.scalars().first()
 
         if rule is None:
             payment.status = "paid"
@@ -275,17 +298,32 @@ class SplitEngine:
         # Claim as in_progress and commit (releasing the lock) before sending any
         # payout, so a concurrent processor sees a non-pending status and never
         # pays the same invoice. Final status is set after the payout loop.
-        payment.status = "in_progress"
-        payment.split_rule_id = rule.id
-        payment.unallocated_store_sats = allocation.unallocated_store_sats
-        payment.pending_remainder_sats = allocation.pending_remainder_sats
-        payment.paid_at = datetime.now(timezone.utc)
+        if not resuming:
+            payment.status = "in_progress"
+            payment.split_rule_id = rule.id
+            payment.unallocated_store_sats = allocation.unallocated_store_sats
+            payment.pending_remainder_sats = allocation.pending_remainder_sats
+            payment.paid_at = datetime.now(timezone.utc)
         await self.session.commit()
+
+        # Rows already recorded for this payment are the idempotency guard:
+        # a target whose row carries a payout id — or any status past the
+        # pre-flight "pending" — must never get a second payout.
+        result = await self.session.execute(
+            select(PaymentSplit).where(PaymentSplit.payment_id == payment.id)
+        )
+        prior_by_target = {s.split_target_id: s for s in result.scalars()}
 
         # A successful API response only means BTCPay accepted the order, not
         # that Lightning delivery completed.
         records: list[PaymentSplit] = []
         for target, amount in splits:
+            prior = prior_by_target.get(target.id)
+            if prior is not None and (
+                prior.btcpay_payout_id is not None or prior.status != "pending"
+            ):
+                records.append(prior)
+                continue
             if amount <= 0:
                 # Share rounded to 0 sats: nothing payable, so skip the payout.
                 record = PaymentSplit(
@@ -295,8 +333,29 @@ class SplitEngine:
                     status="skipped",
                 )
                 self.session.add(record)
+                await self.session.commit()
                 records.append(record)
                 continue
+
+            if prior is None:
+                # Durable pre-flight marker committed BEFORE the BTCPay call:
+                # after a crash, a target with no row provably never had a
+                # payout attempted, so resume can create one safely.
+                record = PaymentSplit(
+                    payment_id=payment.id,
+                    split_target_id=target.id,
+                    amount_sats=amount,
+                    status="pending",
+                )
+                self.session.add(record)
+            else:
+                # Interrupted pre-flight row from a crashed run: no payout id
+                # was recorded, so retry it with the amount already audited.
+                record = prior
+                record.retry_count += 1
+                amount = record.amount_sats
+            await self.session.commit()
+
             payout_id: str | None = None
             payout_status = "pending"
             failure_reason: str | None = None
@@ -347,17 +406,19 @@ class SplitEngine:
                     payout_status = "failed"
                     failure_reason = str(exc)[:1000]
 
-            record = PaymentSplit(
-                payment_id=payment.id,
-                split_target_id=target.id,
-                amount_sats=amount,
-                btcpay_payout_id=payout_id,
-                status=payout_status,
-                failure_reason=failure_reason,
-            )
-            self.session.add(record)
+            # Persist this target's payout id/status before touching the next
+            # target, so a crash mid-loop never loses a created payout.
+            record.btcpay_payout_id = payout_id
+            record.status = payout_status
+            record.failure_reason = failure_reason
+            await self.session.commit()
             records.append(record)
 
-        payment.status = derive_payment_status(records)
+        # Derive the parent status from ALL of its split rows — a resumed
+        # payment may have rows beyond the ones this run touched.
+        result = await self.session.execute(
+            select(PaymentSplit).where(PaymentSplit.payment_id == payment.id)
+        )
+        payment.status = derive_payment_status(list(result.scalars()))
         await self.session.commit()
         return records
