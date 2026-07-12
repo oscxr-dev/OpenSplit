@@ -21,6 +21,10 @@ export interface TenantResponse {
   public_transparency_enabled?: boolean | null;
   public_country?: string | null;
   public_city?: string | null;
+  /** Team Nostr identity — PUBLIC key only (x-only hex + derived npub).
+   *  The signing key is server-side env config and never reaches the API. */
+  nostr_pubkey?: string | null;
+  nostr_npub?: string | null;
   /** BTCPay connection. The raw API key and webhook secret are never sent by
    *  the server — only presence indicators (`btcpay_api_key_set` /
    *  `btcpay_api_key_last4` / `btcpay_webhook_secret_set`). */
@@ -207,6 +211,19 @@ export interface ProofIntegrity {
   balanced: boolean;
 }
 
+/** A team-signed Nostr proof event (kind 2718). `event_json` is the verbatim
+ *  signed event — the copyable artifact any Nostr library can verify against
+ *  `pubkey`/`npub`. Returned by POST /payments/{id}/proof/sign and embedded
+ *  in the proof once signed. */
+export interface NostrProof {
+  event_json: string;
+  event_id: string;
+  pubkey: string;
+  npub: string;
+  kind: number;
+  created_at: number;
+}
+
 export interface SplitProof {
   payment_id: string;
   amount_sats: number;
@@ -217,6 +234,9 @@ export interface SplitProof {
    *  freeze time (see orchestrator services/proof_hash.py). Null for
    *  payments settled before the column existed. Authenticated proof only. */
   rule_fingerprint?: string | null;
+  /** Team-signed Nostr event over this proof; null until signed.
+   *  Authenticated proof only. */
+  nostr_proof?: NostrProof | null;
   members: ProofSplit[];
   integrity: ProofIntegrity;
 }

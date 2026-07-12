@@ -48,6 +48,11 @@ class Tenant(Base):
     # only — never a precise address or coordinates). NULL => "Unknown location".
     public_country: Mapped[str | None] = mapped_column(String(80), nullable=True)
     public_city: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    # The team's Nostr PUBLIC key (x-only, lowercase 64-hex) that signed proofs
+    # verify against. PUBLIC key only — the signing key lives exclusively in the
+    # ORCHESTRATOR_NOSTR_SECKEY environment variable (see core/nostr_keys.py)
+    # and must never get a column here.
+    nostr_pubkey: Mapped[str | None] = mapped_column(String(64), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
@@ -71,6 +76,15 @@ class Tenant(Base):
     @property
     def btcpay_webhook_secret_set(self) -> bool:
         return bool(self.btcpay_webhook_secret)
+
+    @property
+    def nostr_npub(self) -> str | None:
+        # NIP-19 display form of nostr_pubkey; derived, never stored.
+        if not self.nostr_pubkey:
+            return None
+        from app.core.nostr_keys import npub_from_hex
+
+        return npub_from_hex(self.nostr_pubkey)
 
 
 # ---------------------------------------------------------------------------
@@ -173,6 +187,11 @@ class Payment(Base):
     # captured in the same commit that freezes split_rule_id and never recomputed.
     # NULL for payments settled before this column existed (no backfill).
     rule_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Verbatim JSON of the team-signed Nostr proof event (services/nostr_proof.py).
+    # TEXT, never JSONB: re-serialization could reorder keys and break the
+    # event-id check — the stored bytes ARE the proof. NULL until signed.
+    # Informational only — no money logic reads it.
+    nostr_proof_event: Mapped[str | None] = mapped_column(Text, nullable=True)
     fiat_amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     fiat_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -65,6 +65,30 @@ amounts unless the operator explicitly opts in**. Credentials and internal
 identifiers are never shown. Privacy regressions on these pages are in scope
 for security reports (see below).
 
+### Nostr key handling (signed Split Proofs)
+
+Signed Split Proofs use the team's Nostr key. The custody rules are strict:
+
+- **The private key is never stored in the database** — not encrypted, not
+  hashed, not anywhere. It is supplied by the self-hosted operator via the
+  `ORCHESTRATOR_NOSTR_SECKEY` environment variable (nsec or hex) and exists
+  only in process memory at signing time. Protecting that environment
+  (compose files, shell history, process listings) is the **operator's
+  responsibility**, exactly like the JWT secret.
+- Only the team's **public** key (npub/hex) is stored, as
+  `tenants.nostr_pubkey`, and the server refuses to sign unless the env key
+  derives exactly that public key.
+- Pasting an nsec into the public-key settings field is rejected with an
+  explicit error and is never persisted or echoed back. If that happens,
+  treat the key as exposed and rotate it.
+- The signed event contains only data already on the authenticated proof
+  (amounts, member labels, payment hashes, preimages, rule fingerprint). It
+  is shown on the authenticated dashboard only, but it is *designed to be
+  shared* — copying it somewhere public is an explicit user action and
+  publishes those details.
+- Any code path that would log, serialize, or store `ORCHESTRATOR_NOSTR_SECKEY`
+  is in scope for security reports.
+
 ## Supported versions
 
 | Version | Supported |

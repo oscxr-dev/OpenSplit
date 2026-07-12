@@ -22,6 +22,8 @@ dependencies = [
     "bcrypt>=4.1",
     "httpx>=0.27",
     "structlog>=24.4",
+    # BIP-340 schnorr signing for Nostr proof events (libsecp256k1 bindings).
+    "coincurve>=20",
 ]
 
 [project.optional-dependencies]

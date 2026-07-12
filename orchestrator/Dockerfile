@@ -15,7 +15,8 @@ RUN pip install --no-cache-dir \
     "python-jose[cryptography]>=3.3" \
     bcrypt>=4.1 \
     httpx>=0.27 \
-    structlog>=24.4
+    structlog>=24.4 \
+    coincurve>=20
 
 COPY pyproject.toml .
 COPY app/ ./app/

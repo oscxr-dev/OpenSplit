@@ -3,8 +3,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { Invoice, SplitProof } from '@/types/api';
 
-// Hoisted, mutable proof-hook state so each test can vary the proof payload
-// without re-mocking the module.
+// Hoisted, mutable hook state so each test can vary the proof payload, the
+// tenant (Nostr key configured or not), and the sign mutation without
+// re-mocking the modules.
 const h = vi.hoisted(() => ({
   proof: {
     data: undefined as SplitProof | undefined,
@@ -12,14 +13,22 @@ const h = vi.hoisted(() => ({
     isError: false,
     refetch: vi.fn(),
   },
+  sign: { mutate: vi.fn(), isPending: false },
+  tenantOverrides: {} as Record<string, unknown>,
 }));
 
 vi.mock('@/hooks/useProof', () => ({
   useProof: () => h.proof,
+  useSignProof: () => h.sign,
 }));
 vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ tenant: { tenant: { btcpay_url: null, btcpay_store_id: null } } }),
+  useAuth: () => ({
+    tenant: {
+      tenant: { btcpay_url: null, btcpay_store_id: null, ...h.tenantOverrides },
+    },
+  }),
 }));
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 import { SplitProofReceipt } from './SplitProofReceipt';
 
@@ -100,6 +109,8 @@ function proofWith(
 afterEach(() => {
   cleanup();
   h.proof = { data: undefined, isLoading: false, isError: false, refetch: vi.fn() };
+  h.sign = { mutate: vi.fn(), isPending: false };
+  h.tenantOverrides = {};
   vi.restoreAllMocks();
 });
 
@@ -224,5 +235,99 @@ describe('SplitProofReceipt rule fingerprint', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Copy fingerprint/ }));
     expect(writeText).toHaveBeenCalledWith(FINGERPRINT);
+  });
+});
+
+const NOSTR_PUBKEY = '3bf0c63fcb93463407af97a5e5ee64fa883d107ef9e558472c4eb9aaaefa459d';
+const NOSTR_NPUB = 'npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6';
+const NOSTR_EVENT_ID = 'a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90';
+const NOSTR_EVENT_JSON = JSON.stringify({
+  pubkey: NOSTR_PUBKEY,
+  created_at: 1780000000,
+  kind: 2718,
+  tags: [['t', 'opensplit-proof']],
+  content: '{"spec":"opensplit-split-proof/v1"}',
+  id: NOSTR_EVENT_ID,
+  sig: 'ff'.repeat(64),
+});
+const NOSTR_PROOF = {
+  event_json: NOSTR_EVENT_JSON,
+  event_id: NOSTR_EVENT_ID,
+  pubkey: NOSTR_PUBKEY,
+  npub: NOSTR_NPUB,
+  kind: 2718,
+  created_at: 1780000000,
+};
+
+describe('SplitProofReceipt Nostr signature', () => {
+  it('offers Sign proof only when paid, key configured, and not yet signed', () => {
+    h.tenantOverrides = { nostr_pubkey: NOSTR_PUBKEY, nostr_npub: NOSTR_NPUB };
+    h.proof = { data: proofWith([{}, {}]), isLoading: false, isError: false, refetch: vi.fn() };
+
+    render(<SplitProofReceipt payment={PAYMENT} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign proof' }));
+    expect(h.sign.mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides the sign action when the team has no Nostr key configured', () => {
+    h.proof = { data: proofWith([{}, {}]), isLoading: false, isError: false, refetch: vi.fn() };
+
+    render(<SplitProofReceipt payment={PAYMENT} />);
+
+    expect(screen.queryByRole('button', { name: 'Sign proof' })).toBeNull();
+    expect(screen.queryByText('Nostr signature')).toBeNull();
+  });
+
+  it('hides the sign action for a payment that is not fully paid', () => {
+    h.tenantOverrides = { nostr_pubkey: NOSTR_PUBKEY, nostr_npub: NOSTR_NPUB };
+    h.proof = { data: proofWith([{}, {}]), isLoading: false, isError: false, refetch: vi.fn() };
+
+    render(<SplitProofReceipt payment={{ ...PAYMENT, status: 'in_progress' }} />);
+
+    expect(screen.queryByRole('button', { name: 'Sign proof' })).toBeNull();
+  });
+
+  it('renders the signed event instead of the sign action once signed', () => {
+    h.tenantOverrides = { nostr_pubkey: NOSTR_PUBKEY, nostr_npub: NOSTR_NPUB };
+    h.proof = {
+      data: proofWith([{}, {}], { nostr_proof: NOSTR_PROOF }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+
+    render(<SplitProofReceipt payment={PAYMENT} />);
+
+    expect(screen.queryByRole('button', { name: 'Sign proof' })).toBeNull();
+    expect(
+      screen.getByText('Signed with the team’s Nostr key — verifiable with any Nostr tooling.')
+    ).toBeTruthy();
+    // Truncated event id and the npub it verifies against.
+    expect(
+      screen.getByText(`event ${NOSTR_EVENT_ID.slice(0, 18)}…${NOSTR_EVENT_ID.slice(-10)}`)
+    ).toBeTruthy();
+    expect(
+      screen.getByText(`verifies against ${NOSTR_NPUB.slice(0, 14)}…${NOSTR_NPUB.slice(-8)}`)
+    ).toBeTruthy();
+  });
+
+  it('copies the full, verbatim signed event JSON to the clipboard', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    h.proof = {
+      data: proofWith([{}, {}], { nostr_proof: NOSTR_PROOF }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+
+    render(<SplitProofReceipt payment={PAYMENT} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Copy event JSON/ }));
+    expect(writeText).toHaveBeenCalledWith(NOSTR_EVENT_JSON);
   });
 });

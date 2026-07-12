@@ -48,6 +48,13 @@ class Settings(BaseSettings):
     # In production this MUST be set explicitly via ORCHESTRATOR_CORS_ORIGINS.
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
+    # Nostr proof signing key (nsec or 64-hex), held in memory only — NEVER
+    # persisted anywhere by this application. Empty = signing disabled. The
+    # self-hosted operator owns this key; see SECURITY.md "Nostr key handling".
+    # Deliberately NOT in _INSECURE_DEFAULTS: the feature is optional and an
+    # empty value just disables it.
+    nostr_seckey: str = ""
+
     # Logging
     log_level: str = "INFO"
     payout_reconcile_seconds: int = 20

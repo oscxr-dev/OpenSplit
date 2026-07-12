@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { SplitProof } from '@/types/api';
+import type { NostrProof, SplitProof } from '@/types/api';
 
 export function useProof(paymentId: string | null) {
   return useQuery<SplitProof>({
@@ -11,5 +11,21 @@ export function useProof(paymentId: string | null) {
     },
     enabled: !!paymentId,
     staleTime: 1000 * 30,
+  });
+}
+
+/** Sign a paid payment's proof with the team's Nostr key (server-side env
+ *  key). Idempotent on the backend; on success the proof query is refreshed
+ *  so the receipt shows the signed event. */
+export function useSignProof(paymentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<NostrProof>({
+    mutationFn: async () => {
+      const res = await api.post(`/payments/${paymentId}/proof/sign`);
+      return res.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['proof', paymentId] });
+    },
   });
 }

@@ -27,6 +27,7 @@ vi.mock('@/hooks/useInvoices', () => ({
 }));
 vi.mock('@/hooks/useProof', () => ({
   useProof: () => h.proof,
+  useSignProof: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ tenant: { tenant: { btcpay_url: null, btcpay_store_id: null } } }),

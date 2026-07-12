@@ -1,6 +1,6 @@
-import { AlertCircle, CheckCircle, Clock, Copy, ExternalLink, ReceiptText, RotateCcw, ShieldCheck, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Copy, ExternalLink, KeyRound, ReceiptText, RotateCcw, ShieldCheck, Zap } from 'lucide-react';
 import { toast } from 'sonner';
-import { useProof } from '@/hooks/useProof';
+import { useProof, useSignProof } from '@/hooks/useProof';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -59,6 +59,30 @@ function LightningSettlementProof({ preimage, paymentHash }: { preimage: string;
 export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: SplitProofReceiptProps) {
   const { data: proof, isLoading, isError, refetch } = useProof(payment.id);
   const { tenant } = useAuth();
+  const signProof = useSignProof(payment.id);
+  // "Sign proof" only makes sense once the payment is fully paid (the split
+  // set is final) and the team has a Nostr public key configured. The signing
+  // key itself lives on the server (env), never in the browser.
+  const nostrProof = proof?.nostr_proof ?? null;
+  const canSign = !nostrProof && payment.status === 'paid' && Boolean(tenant?.tenant.nostr_pubkey);
+
+  function handleSignProof() {
+    signProof.mutate(undefined, {
+      onSuccess: () => toast.success('Proof signed with the team’s Nostr key'),
+      onError: (error) => {
+        const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data
+          ?.detail;
+        toast.error(typeof detail === 'string' ? detail : 'Could not sign the proof');
+      },
+    });
+  }
+
+  function handleCopyNostrEvent() {
+    if (!nostrProof) return;
+    copyToClipboard(nostrProof.event_json)
+      .then(() => toast.success('Signed Nostr event copied'))
+      .catch(() => toast.error('Could not copy signed event'));
+  }
   const payoutsUrl = btcpayPayoutsUrl(
     tenant?.tenant.btcpay_url,
     tenant?.tenant.btcpay_store_id,
@@ -271,6 +295,58 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
               <p className="mt-1 truncate font-mono text-[#F5F5F7]">
                 {truncateMiddle(proof.rule_fingerprint, 18, 10)}
               </p>
+            </div>
+          )}
+          {nostrProof && (
+            <div className="rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3 sm:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <p className="flex items-center gap-1.5 text-[#94A3B8]">
+                  <KeyRound className="h-3.5 w-3.5 shrink-0 text-[#FF2D78]" strokeWidth={1.8} />
+                  Nostr signature
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCopyNostrEvent}
+                  className="inline-flex shrink-0 items-center gap-1 font-medium text-[#FF2D78] transition-colors hover:text-[#FF6DA6]"
+                >
+                  <Copy className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  Copy event JSON
+                </button>
+              </div>
+              <p className="mt-1.5 text-[#94A3B8]">
+                Signed with the team’s Nostr key — verifiable with any Nostr tooling.
+              </p>
+              <p
+                className="mt-1.5 truncate font-mono text-[#F5F5F7]"
+                title="NIP-01 event id — paste the full event JSON into any Nostr library to verify the signature"
+              >
+                event {truncateMiddle(nostrProof.event_id, 18, 10)}
+              </p>
+              <p className="mt-0.5 truncate font-mono text-[#94A3B8]" title={nostrProof.npub}>
+                verifies against {truncateMiddle(nostrProof.npub, 14, 8)}
+              </p>
+            </div>
+          )}
+          {canSign && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3 sm:col-span-2">
+              <div className="min-w-0">
+                <p className="flex items-center gap-1.5 text-[#94A3B8]">
+                  <KeyRound className="h-3.5 w-3.5 shrink-0 text-[#FF2D78]" strokeWidth={1.8} />
+                  Nostr signature
+                </p>
+                <p className="mt-1.5 text-[#94A3B8]">
+                  Seal this proof with the team’s Nostr key so anyone can verify it.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                loading={signProof.isPending}
+                onClick={handleSignProof}
+              >
+                Sign proof
+              </Button>
             </div>
           )}
           <div className="rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3 sm:col-span-2">

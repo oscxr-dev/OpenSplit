@@ -163,6 +163,11 @@ async def update_my_tenant(
         tenant.public_country = body.public_country
     if body.public_city is not None:
         tenant.public_city = body.public_city
+    # Nostr public key: presence in the request (not None-ness) decides, so an
+    # explicitly sent blank clears the stored key while an omitted field never
+    # touches it. The schema already normalized npub→hex and rejected nsec.
+    if "nostr_pubkey" in body.model_fields_set:
+        tenant.nostr_pubkey = body.nostr_pubkey
     # BTCPay connection fields. The schema turns blank strings into None, so a
     # blank input can never wipe a stored value (PATCH: omitted = unchanged).
     if body.btcpay_url is not None:

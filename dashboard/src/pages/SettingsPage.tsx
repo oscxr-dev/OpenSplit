@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Check, Coins, Globe2, Info, Link2, LogOut, MapPin, Moon, ShieldCheck, Store, Sun } from 'lucide-react';
+import { Check, Coins, Globe2, Info, KeyRound, Link2, LogOut, MapPin, Moon, ShieldCheck, Store, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -287,6 +287,49 @@ export function SettingsPage() {
     } finally {
       setSavingShowAmounts(false);
       setConfirmShowAmountsOpen(false);
+    }
+  }
+
+  // Team Nostr signing identity — the PUBLIC key signed proofs verify against.
+  // Lives on the Public page tab because it is public verification identity
+  // (like the slug), not store plumbing. The private key never passes through
+  // the browser: the server signs with its ORCHESTRATOR_NOSTR_SECKEY env var.
+  const savedNostrNpub = tenant?.tenant.nostr_npub ?? '';
+  const [nostrKeyInput, setNostrKeyInput] = useState(savedNostrNpub);
+  const [savingNostrKey, setSavingNostrKey] = useState(false);
+  useEffect(() => {
+    setNostrKeyInput(savedNostrNpub);
+  }, [savedNostrNpub]);
+
+  const nostrKeyDirty = nostrKeyInput.trim() !== savedNostrNpub;
+
+  async function saveNostrKey() {
+    if (!nostrKeyDirty) return;
+    const trimmed = nostrKeyInput.trim();
+    // Defense in depth: the backend rejects nsec too, but a private key must
+    // not even leave the browser in a request body.
+    if (trimmed.toLowerCase().startsWith('nsec')) {
+      toast.error('That is a PRIVATE key (nsec) — never paste it here. Enter your public npub instead.');
+      return;
+    }
+    setSavingNostrKey(true);
+    try {
+      // A blank value explicitly clears the saved key.
+      await patchTenantSettings(
+        { nostr_pubkey: trimmed },
+        { success: trimmed ? 'Nostr public key saved' : 'Nostr public key removed', nextSlug: savedSlug }
+      );
+    } catch (error) {
+      const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      toast.error(
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail) && typeof detail[0]?.msg === 'string'
+            ? detail[0].msg
+            : 'Could not save the Nostr public key'
+      );
+    } finally {
+      setSavingNostrKey(false);
     }
   }
 
@@ -722,6 +765,48 @@ export function SettingsPage() {
                       Public proof is Off. Amount visibility is paused — turn Public proof on to change it.
                     </div>
                   )}
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.07] p-6 sm:p-8">
+                <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-end sm:justify-between sm:text-left">
+                  <div className="w-full sm:max-w-md">
+                    <div className="flex items-center justify-center gap-3 sm:justify-start">
+                      <KeyRound className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
+                      <h2 className="font-semibold text-[#F5F5F7]">Nostr signing identity</h2>
+                      <InfoTip>
+                        The team’s PUBLIC key (npub or hex) that signed Split Proofs verify against. The private signing key stays on your server as ORCHESTRATOR_NOSTR_SECKEY — OpenSplit never stores it. Never paste an nsec here.
+                      </InfoTip>
+                    </div>
+                    <Input
+                      className="mt-4 font-mono"
+                      value={nostrKeyInput}
+                      onChange={(event) => setNostrKeyInput(event.target.value)}
+                      placeholder="npub1…"
+                      aria-label="Team Nostr public key"
+                      maxLength={128}
+                      spellCheck={false}
+                    />
+                    <p className="mt-2 break-all font-mono text-xs text-[#94A3B8]">
+                      {savedNostrNpub ? (
+                        <>
+                          Saved: <span className="text-[#F5F5F7]">{savedNostrNpub}</span>
+                        </>
+                      ) : (
+                        'No key saved — the Sign proof action stays hidden on receipts.'
+                      )}
+                    </p>
+                  </div>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={saveNostrKey}
+                    loading={savingNostrKey}
+                    disabled={!nostrKeyDirty}
+                    className="shrink-0"
+                  >
+                    Save key
+                  </Button>
                 </div>
               </div>
             </CardContent>

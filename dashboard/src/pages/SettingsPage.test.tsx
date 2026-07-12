@@ -267,3 +267,56 @@ describe('SettingsPage tenant UUID privacy', () => {
     expect(leaks).toEqual([]);
   });
 });
+
+const NPUB = 'npub180cvv07tjdrrgpa0j7j7tmnyl2yr6yr7l8j4s3evf6u64th6gkwsyjh6w6';
+
+describe('SettingsPage Nostr signing identity', () => {
+  it('lives on the Public page tab and shows the empty state', () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Public page' }));
+    expect(screen.getByText('Nostr signing identity')).toBeTruthy();
+    expect(screen.getByLabelText('Team Nostr public key')).toBeTruthy();
+    expect(
+      screen.getByText('No key saved — the Sign proof action stays hidden on receipts.')
+    ).toBeTruthy();
+  });
+
+  it('shows the saved npub and PATCHes a newly entered key', async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Public page' }));
+    fireEvent.change(screen.getByLabelText('Team Nostr public key'), {
+      target: { value: ` ${NPUB} ` },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save key' }));
+
+    await waitFor(() => {
+      expect(h.patch).toHaveBeenCalledWith('/tenants/me', { nostr_pubkey: NPUB });
+    });
+  });
+
+  it('prefills the saved npub from the tenant', () => {
+    h.tenantOverrides = { nostr_npub: NPUB, nostr_pubkey: 'ab'.repeat(32) };
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Public page' }));
+    expect((screen.getByLabelText('Team Nostr public key') as HTMLInputElement).value).toBe(NPUB);
+  });
+
+  it('refuses to send an nsec (private key) anywhere', async () => {
+    const { toast } = await import('sonner');
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Public page' }));
+    fireEvent.change(screen.getByLabelText('Team Nostr public key'), {
+      target: { value: 'nsec1vl029mgpspedva04g90vltkh6fvh240zqtv9k0t9af8935ke9laqsnlfe5' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save key' }));
+
+    expect(h.patch).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith(
+      'That is a PRIVATE key (nsec) — never paste it here. Enter your public npub instead.'
+    );
+  });
+});

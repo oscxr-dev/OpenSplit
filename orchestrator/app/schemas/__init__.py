@@ -44,6 +44,10 @@ class TenantResponse(BaseModel):
     public_show_amounts: bool = False
     public_country: str | None = None
     public_city: str | None = None
+    # Team Nostr identity — PUBLIC key only (x-only hex + derived npub display).
+    # The signing key is env-held server config and has no schema anywhere.
+    nostr_pubkey: str | None = None
+    nostr_npub: str | None = None
     # BTCPay connection — REDACTION CONTRACT: the raw btcpay_api_key and
     # btcpay_webhook_secret must NEVER be fields on this (or any) response
     # schema. Only presence indicators leave the server. (The sole exception is
@@ -78,6 +82,20 @@ class TenantUpdate(BaseModel):
     btcpay_url: str | None = None
     btcpay_api_key: str | None = None
     btcpay_store_id: str | None = None
+    # Nostr PUBLIC key (npub or 64-hex; normalized to hex). Unlike the BTCPay
+    # fields, an explicitly provided blank CLEARS the stored key (the router
+    # checks model_fields_set) — removing a verification identity is a
+    # legitimate, safe operation. An nsec is rejected with a loud error.
+    nostr_pubkey: str | None = None
+
+    @field_validator("nostr_pubkey")
+    @classmethod
+    def normalize_nostr_pubkey_field(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        from app.core.nostr_keys import normalize_nostr_pubkey
+
+        return normalize_nostr_pubkey(value)
 
     @field_validator("btcpay_url")
     @classmethod
@@ -440,6 +458,22 @@ class ProofIntegrity(BaseModel):
     balanced: bool  # True when split amounts + store remainder + pending remainder sum exactly to payment
 
 
+class NostrProofResponse(BaseModel):
+    """A stored team-signed Nostr proof event, plus parsed display fields.
+
+    ``event_json`` is the verbatim signed event exactly as persisted — the
+    copyable artifact third parties verify. The other fields are parsed out
+    of it server-side purely for display (never re-derived from key material).
+    """
+
+    event_json: str
+    event_id: str
+    pubkey: str
+    npub: str
+    kind: int
+    created_at: int
+
+
 class SplitProofResponse(BaseModel):
     payment_id: uuid.UUID
     amount_sats: int
@@ -450,6 +484,9 @@ class SplitProofResponse(BaseModel):
     # captured at payment freeze time. Authenticated proof only for now — see
     # the EXPOSURE note in proof_hash.py before adding it to public pages.
     rule_fingerprint: str | None = None
+    # Team-signed Nostr event over this proof (services/nostr_proof.py).
+    # Authenticated proof only — public-page exposure is a separate decision.
+    nostr_proof: NostrProofResponse | None = None
     members: list[ProofSplitResponse]
     integrity: ProofIntegrity
 
