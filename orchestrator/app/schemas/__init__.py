@@ -446,6 +446,10 @@ class SplitProofResponse(BaseModel):
     status: str  # payment status
     split_rule_id: uuid.UUID | None = None
     split_rule_version: int | None = None
+    # Hex SHA-256 of the frozen rule's canonical form (services/proof_hash.py),
+    # captured at payment freeze time. Authenticated proof only for now — see
+    # the EXPOSURE note in proof_hash.py before adding it to public pages.
+    rule_fingerprint: str | None = None
     members: list[ProofSplitResponse]
     integrity: ProofIntegrity
 

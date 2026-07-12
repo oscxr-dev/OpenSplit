@@ -64,13 +64,18 @@ const PAYMENT: Invoice = {
   ],
 };
 
-function proofWith(members: Partial<SplitProof['members'][number]>[]): SplitProof {
+function proofWith(
+  members: Partial<SplitProof['members'][number]>[],
+  overrides: Partial<SplitProof> = {}
+): SplitProof {
   return {
     payment_id: 'pay-abc',
     amount_sats: 21001,
     status: 'paid',
     split_rule_id: 'rule-1',
     split_rule_version: 3,
+    rule_fingerprint: null,
+    ...overrides,
     members: members.map((overrides, i) => ({
       split_id: i === 0 ? 'split-carol' : 'split-dave',
       split_target_id: null,
@@ -166,5 +171,58 @@ describe('SplitProofReceipt Lightning settlement proof', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Copy preimage/ }));
     expect(writeText).toHaveBeenCalledWith(PREIMAGE);
+  });
+});
+
+const FINGERPRINT = 'bc0c49b1591b2d47dbaf19324e09fdf78517114e314b4346ed39cb5397b322aa';
+
+describe('SplitProofReceipt rule fingerprint', () => {
+  it('renders the truncated fingerprint when the proof carries one', () => {
+    h.proof = {
+      data: proofWith([{}, {}], { rule_fingerprint: FINGERPRINT }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+
+    render(<SplitProofReceipt payment={PAYMENT} />);
+
+    expect(screen.getByText('Rule fingerprint (SHA-256)')).toBeTruthy();
+    expect(
+      screen.getByText(`${FINGERPRINT.slice(0, 18)}…${FINGERPRINT.slice(-10)}`)
+    ).toBeTruthy();
+  });
+
+  it('hides the fingerprint block when the proof has none (old payments)', () => {
+    h.proof = {
+      data: proofWith([{}, {}], { rule_fingerprint: null }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+
+    render(<SplitProofReceipt payment={PAYMENT} />);
+
+    expect(screen.queryByText('Rule fingerprint (SHA-256)')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Copy fingerprint/ })).toBeNull();
+  });
+
+  it('copies the full, untruncated fingerprint to the clipboard', () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    h.proof = {
+      data: proofWith([{}, {}], { rule_fingerprint: FINGERPRINT }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+
+    render(<SplitProofReceipt payment={PAYMENT} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Copy fingerprint/ }));
+    expect(writeText).toHaveBeenCalledWith(FINGERPRINT);
   });
 });

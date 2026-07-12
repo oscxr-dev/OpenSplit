@@ -213,6 +213,10 @@ export interface SplitProof {
   status: string;
   split_rule_id: string | null;
   split_rule_version: number | null;
+  /** Hex SHA-256 of the frozen rule's canonical form, captured at payment
+   *  freeze time (see orchestrator services/proof_hash.py). Null for
+   *  payments settled before the column existed. Authenticated proof only. */
+  rule_fingerprint?: string | null;
   members: ProofSplit[];
   integrity: ProofIntegrity;
 }

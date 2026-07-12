@@ -169,6 +169,10 @@ class Payment(Base):
     memo: Mapped[str] = mapped_column(String(500), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="pending")  # pending | in_progress | paid | partial | failed
     split_rule_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("split_rules.id"), nullable=True)
+    # Hex SHA-256 of the frozen rule's canonical form (see services/proof_hash.py),
+    # captured in the same commit that freezes split_rule_id and never recomputed.
+    # NULL for payments settled before this column existed (no backfill).
+    rule_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True)
     fiat_amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     fiat_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

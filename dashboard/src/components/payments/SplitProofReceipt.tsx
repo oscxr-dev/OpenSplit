@@ -74,6 +74,13 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
       .catch(() => toast.error('Could not copy proof link'));
   }
 
+  function handleCopyFingerprint() {
+    if (!proof?.rule_fingerprint) return;
+    copyToClipboard(proof.rule_fingerprint)
+      .then(() => toast.success('Rule fingerprint copied'))
+      .catch(() => toast.error('Could not copy rule fingerprint'));
+  }
+
   const proofRows = proof?.members.map((member) => {
     const matchingSplit = payment.splits.find((split) => split.id === member.split_id);
     return {
@@ -243,6 +250,29 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
             </div>
             <p className="mt-1 truncate font-mono text-[#F5F5F7]">{proofLink}</p>
           </div>
+          {proof?.rule_fingerprint && (
+            <div className="rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3 sm:col-span-2">
+              <div className="flex items-center justify-between gap-3">
+                <p
+                  className="text-[#94A3B8]"
+                  title="Identifies the exact rule version that produced this split — the SHA-256 of the rule sealed with this payment"
+                >
+                  Rule fingerprint (SHA-256)
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCopyFingerprint}
+                  className="inline-flex shrink-0 items-center gap-1 font-medium text-[#FF2D78] transition-colors hover:text-[#FF6DA6]"
+                >
+                  <Copy className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  Copy fingerprint
+                </button>
+              </div>
+              <p className="mt-1 truncate font-mono text-[#F5F5F7]">
+                {truncateMiddle(proof.rule_fingerprint, 18, 10)}
+              </p>
+            </div>
+          )}
           <div className="rounded-md border border-white/[0.07] bg-[#0A0B12]/42 p-3 sm:col-span-2">
             <p className="text-[#94A3B8]">Balance</p>
             <p className="mt-1 font-mono text-[#F5F5F7]">

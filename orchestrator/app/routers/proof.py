@@ -53,6 +53,7 @@ def build_proof(
     status: str,
     split_rule_id: uuid.UUID | None,
     split_rule_version: int | None,
+    rule_fingerprint: str | None = None,
     rows: list[ProofSplitRow],
 ) -> SplitProofResponse:
     """Assemble the proof payload and integrity check. Pure and side-effect free."""
@@ -90,6 +91,7 @@ def build_proof(
         status=status,
         split_rule_id=split_rule_id,
         split_rule_version=split_rule_version,
+        rule_fingerprint=rule_fingerprint,
         members=members,
         integrity=integrity,
     )
@@ -153,5 +155,6 @@ async def get_split_proof(
         status=payment.status,
         split_rule_id=payment.split_rule_id,
         split_rule_version=split_rule_version,
+        rule_fingerprint=payment.rule_fingerprint,
         rows=rows,
     )

@@ -13,6 +13,7 @@ from app.models import Payment, PaymentSplit, SplitRule, SplitTarget
 from app.services.lnbits_client import LNBitsClient
 from app.services.btcpay_client import BTCPayClient
 from app.services.lnd_client import LNDClient, load_lnd_receiver
+from app.services.proof_hash import rule_fingerprint
 
 
 @dataclass(frozen=True)
@@ -215,6 +216,9 @@ class SplitEngine:
 
         payment.status = derive_payment_status(records)
         payment.split_rule_id = rule.id
+        # Fingerprint over ALL of the rule's stored targets (rule.targets), not
+        # the >0% subset used for allocation — it identifies the rule version.
+        payment.rule_fingerprint = rule_fingerprint(rule, rule.targets)
         payment.paid_at = datetime.now(timezone.utc)
         await self.session.commit()
         return records
@@ -301,6 +305,9 @@ class SplitEngine:
         if not resuming:
             payment.status = "in_progress"
             payment.split_rule_id = rule.id
+            # Fingerprint over ALL of the rule's stored targets (rule.targets),
+            # frozen in the same commit that claims the rule for this payment.
+            payment.rule_fingerprint = rule_fingerprint(rule, rule.targets)
             payment.unallocated_store_sats = allocation.unallocated_store_sats
             payment.pending_remainder_sats = allocation.pending_remainder_sats
             payment.paid_at = datetime.now(timezone.utc)
