@@ -16,7 +16,8 @@ RUN pip install --no-cache-dir \
     bcrypt>=4.1 \
     httpx>=0.27 \
     structlog>=24.4 \
-    coincurve>=20
+    coincurve>=20 \
+    "websockets>=13"
 
 COPY pyproject.toml .
 COPY app/ ./app/

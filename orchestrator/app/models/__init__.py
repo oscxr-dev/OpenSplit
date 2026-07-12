@@ -192,6 +192,12 @@ class Payment(Base):
     # event-id check — the stored bytes ARE the proof. NULL until signed.
     # Informational only — no money logic reads it.
     nostr_proof_event: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Compact JSON array of per-relay publish outcomes for the signed proof
+    # event ({relay, ok, at, error?} — services/nostr_publish.py), refreshed
+    # on every publish attempt. NULL = never attempted. Best-effort and
+    # informational only: publishing can never block signing, and no money
+    # logic reads it.
+    nostr_relay_results: Mapped[str | None] = mapped_column(Text, nullable=True)
     fiat_amount: Mapped[float | None] = mapped_column(Numeric(18, 2), nullable=True)
     fiat_currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

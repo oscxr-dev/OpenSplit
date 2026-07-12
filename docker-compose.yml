@@ -309,6 +309,10 @@ services:
       # "Sign proof" feature. Held in the container environment only — never
       # written to the database. See SECURITY.md "Nostr key handling".
       ORCHESTRATOR_NOSTR_SECKEY: ${ORCHESTRATOR_NOSTR_SECKEY:-}
+      # Relays signed proofs are best-effort published to. ${VAR-default}
+      # (no colon) on purpose: an EMPTY value in .env deliberately disables
+      # publishing, while an unset one falls back to the defaults here.
+      ORCHESTRATOR_NOSTR_RELAYS: ${ORCHESTRATOR_NOSTR_RELAYS-wss://relay.damus.io,wss://nos.lol,wss://relay.primal.net}
     healthcheck:
       test:
         - CMD-SHELL

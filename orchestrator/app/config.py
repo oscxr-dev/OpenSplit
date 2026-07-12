@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import Annotated
 from urllib.parse import urlsplit
 
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 # Placeholder defaults that must never be used in production.
 _INSECURE_DEFAULTS = {
@@ -46,7 +47,13 @@ class Settings(BaseSettings):
 
     # CORS — comma-separated list of allowed origins. Defaults to local dev only.
     # In production this MUST be set explicitly via ORCHESTRATOR_CORS_ORIGINS.
-    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # NoDecode on the list fields: without it pydantic-settings insists the env
+    # value be JSON and crashes on the documented comma-separated form before
+    # _split_comma_list ever runs.
+    cors_origins: Annotated[list[str], NoDecode] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+    ]
 
     # Nostr proof signing key (nsec or 64-hex), held in memory only — NEVER
     # persisted anywhere by this application. Empty = signing disabled. The
@@ -55,13 +62,25 @@ class Settings(BaseSettings):
     # empty value just disables it.
     nostr_seckey: str = ""
 
+    # Nostr relays that signed Split Proof events are best-effort published to
+    # (comma-separated wss:// URLs). Publishing is never load-bearing: it runs
+    # only after a signed event is verified and persisted, is bounded by a
+    # short timeout, and failures are recorded per relay — never raised. Set
+    # EXPLICITLY EMPTY to disable publishing entirely (signing still works and
+    # proofs stay local); unset keeps this well-known default set.
+    nostr_relays: Annotated[list[str], NoDecode] = [
+        "wss://relay.damus.io",
+        "wss://nos.lol",
+        "wss://relay.primal.net",
+    ]
+
     # Logging
     log_level: str = "INFO"
     payout_reconcile_seconds: int = 20
 
-    @field_validator("cors_origins", mode="before")
+    @field_validator("cors_origins", "nostr_relays", mode="before")
     @classmethod
-    def _split_cors_origins(cls, value: object) -> object:
+    def _split_comma_list(cls, value: object) -> object:
         """Accept a comma-separated string (env-friendly) or a list."""
         if isinstance(value, str):
             return [origin.strip() for origin in value.split(",") if origin.strip()]

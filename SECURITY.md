@@ -82,10 +82,17 @@ Signed Split Proofs use the team's Nostr key. The custody rules are strict:
   explicit error and is never persisted or echoed back. If that happens,
   treat the key as exposed and rotate it.
 - The signed event contains only data already on the authenticated proof
-  (amounts, member labels, payment hashes, preimages, rule fingerprint). It
-  is shown on the authenticated dashboard only, but it is *designed to be
-  shared* — copying it somewhere public is an explicit user action and
-  publishes those details.
+  (amounts, member labels, payment hashes, preimages, rule fingerprint) —
+  and it is *designed to be public*. **Signing publishes**: once signed, the
+  event is best-effort broadcast to the public Nostr relays configured in
+  `ORCHESTRATOR_NOSTR_RELAYS` (a small well-known default set unless
+  overridden; set it explicitly empty to keep signed proofs local). An event
+  accepted by a public relay is permanently public — sign a payment's proof
+  only if you are comfortable publishing those details.
+- Publishing is never load-bearing: it runs only after the signed event is
+  verified and committed, is bounded by a short timeout, and per-relay
+  failures are recorded and shown honestly — they can never block signing or
+  affect payouts.
 - Any code path that would log, serialize, or store `ORCHESTRATOR_NOSTR_SECKEY`
   is in scope for security reports.
 

@@ -14,12 +14,14 @@ const h = vi.hoisted(() => ({
     refetch: vi.fn(),
   },
   sign: { mutate: vi.fn(), isPending: false },
+  publish: { mutate: vi.fn(), isPending: false },
   tenantOverrides: {} as Record<string, unknown>,
 }));
 
 vi.mock('@/hooks/useProof', () => ({
   useProof: () => h.proof,
   useSignProof: () => h.sign,
+  usePublishProof: () => h.publish,
 }));
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({
@@ -110,6 +112,7 @@ afterEach(() => {
   cleanup();
   h.proof = { data: undefined, isLoading: false, isError: false, refetch: vi.fn() };
   h.sign = { mutate: vi.fn(), isPending: false };
+  h.publish = { mutate: vi.fn(), isPending: false };
   h.tenantOverrides = {};
   vi.restoreAllMocks();
 });
@@ -250,9 +253,11 @@ const NOSTR_EVENT_JSON = JSON.stringify({
   id: NOSTR_EVENT_ID,
   sig: 'ff'.repeat(64),
 });
+const NOSTR_NOTE_ID = 'note1e0kyw05lscz8dvzcv95pu8xhpwsfynjnmxhkqcm7txsyj0z7t9ysvz9wnj';
 const NOSTR_PROOF = {
   event_json: NOSTR_EVENT_JSON,
   event_id: NOSTR_EVENT_ID,
+  note_id: NOSTR_NOTE_ID,
   pubkey: NOSTR_PUBKEY,
   npub: NOSTR_NPUB,
   kind: 2718,
@@ -329,5 +334,93 @@ describe('SplitProofReceipt Nostr signature', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Copy event JSON/ }));
     expect(writeText).toHaveBeenCalledWith(NOSTR_EVENT_JSON);
+  });
+});
+
+describe('SplitProofReceipt relay publication', () => {
+  it('offers publishing only once the proof is signed', () => {
+    // Unsigned proof: no publication section at all.
+    h.proof = { data: proofWith([{}, {}]), isLoading: false, isError: false, refetch: vi.fn() };
+    const { unmount } = render(<SplitProofReceipt payment={PAYMENT} />);
+    expect(screen.queryByText('Relay publication')).toBeNull();
+    expect(screen.queryByRole('button', { name: /publish to relays/i })).toBeNull();
+    unmount();
+
+    // Signed but never published: empty state + first-time label, and the
+    // click reaches the mutation.
+    h.proof = {
+      data: proofWith([{}, {}], { nostr_proof: NOSTR_PROOF }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+    render(<SplitProofReceipt payment={PAYMENT} />);
+    expect(screen.getByText('Relay publication')).toBeTruthy();
+    expect(screen.getByText(/Not published to any relay yet/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Publish to relays' }));
+    expect(h.publish.mutate).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders accepted and failed relays honestly, with a re-publish action', () => {
+    h.proof = {
+      data: proofWith([{}, {}], {
+        nostr_proof: {
+          ...NOSTR_PROOF,
+          relay_results: [
+            { relay: 'wss://relay.damus.io', ok: true, at: '2026-07-12T10:00:00+00:00' },
+            {
+              relay: 'wss://nos.lol',
+              ok: false,
+              at: '2026-07-12T10:00:00+00:00',
+              error: 'no OK ack within 5s',
+            },
+          ],
+        },
+      }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+
+    render(<SplitProofReceipt payment={PAYMENT} />);
+
+    expect(screen.getByText(/Accepted by 1 of 2 relays/)).toBeTruthy();
+    expect(screen.getByText('relay.damus.io')).toBeTruthy();
+    expect(screen.getByText('nos.lol')).toBeTruthy();
+    expect(screen.getByText('no OK ack within 5s')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Re-publish to relays' })).toBeTruthy();
+    // Accepted somewhere public → the njump lookup link points at the note id.
+    const link = screen.getByRole('link', { name: /Look it up on njump/ });
+    expect(link.getAttribute('href')).toBe(`https://njump.me/${NOSTR_NOTE_ID}`);
+  });
+
+  it('shows the all-failed state without pretending and offers a retry', () => {
+    h.proof = {
+      data: proofWith([{}, {}], {
+        nostr_proof: {
+          ...NOSTR_PROOF,
+          relay_results: [
+            {
+              relay: 'wss://relay.damus.io',
+              ok: false,
+              at: '2026-07-12T10:00:00+00:00',
+              error: 'OSError: connection refused',
+            },
+          ],
+        },
+      }),
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+
+    render(<SplitProofReceipt payment={PAYMENT} />);
+
+    expect(screen.getByText('No relay has accepted this proof yet.')).toBeTruthy();
+    expect(screen.getByText('OSError: connection refused')).toBeTruthy();
+    // Nothing accepted → no njump link (nothing to look up yet).
+    expect(screen.queryByRole('link', { name: /Look it up on njump/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Re-publish to relays' }));
+    expect(h.publish.mutate).toHaveBeenCalledTimes(1);
   });
 });

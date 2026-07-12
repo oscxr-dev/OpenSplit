@@ -6,8 +6,15 @@ sum to the payment amount. It is strictly read-only.
 
 POST /{id}/proof/sign signs that proof with the team's Nostr key (see
 services/nostr_proof.py for the bundle contract and key custody). Its ONLY
-write is the informational payments.nostr_proof_event column — it never
-touches money state, the split engine, payouts, webhooks, or reconciliation.
+writes are the informational payments.nostr_proof_event and
+payments.nostr_relay_results columns — it never touches money state, the
+split engine, payouts, webhooks, or reconciliation.
+
+POST /{id}/proof/publish re-broadcasts an already-signed event to the
+configured relays (services/nostr_publish.py). Publishing — from either
+endpoint — is best-effort by construction: it runs only after the signed
+event is committed, is bounded by a short timeout, and can never fail the
+request or affect money state.
 
 Tenant-scoped — a payment is only visible to the tenant that owns it.
 """
@@ -17,6 +24,7 @@ import json
 import uuid
 from dataclasses import dataclass
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,6 +33,7 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.core.deps import get_current_tenant, get_current_user
 from app.core.nostr_keys import (
+    note_from_hex,
     npub_from_hex,
     pubkey_hex_from_seckey,
     seckey_bytes_from_env_value,
@@ -33,6 +42,7 @@ from app.database import get_session
 from app.models import Payment, PaymentSplit, SplitRule, SplitTarget, Tenant, User
 from app.schemas import (
     NostrProofResponse,
+    NostrRelayResult,
     ProofIntegrity,
     ProofSplitResponse,
     SplitProofResponse,
@@ -42,6 +52,9 @@ from app.services.nostr_proof import (
     sign_proof_event,
     verify_proof_event,
 )
+from app.services.nostr_publish import publish_event
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/payments", tags=["proof"])
 
@@ -64,7 +77,23 @@ class ProofSplitRow:
     ln_payment_hash: str | None = None
 
 
-def nostr_proof_from_stored(event_json: str | None) -> NostrProofResponse | None:
+def _relay_results_from_stored(raw: str | None) -> list[NostrRelayResult] | None:
+    """Parse stored per-relay publish outcomes. Pure and lenient.
+
+    Like the event itself this is our own write; a bad row means "no recorded
+    results" for display purposes, never a 500 — it is informational only.
+    """
+    if not raw:
+        return None
+    try:
+        return [NostrRelayResult(**entry) for entry in json.loads(raw)]
+    except Exception:
+        return None
+
+
+def nostr_proof_from_stored(
+    event_json: str | None, relay_results_json: str | None = None
+) -> NostrProofResponse | None:
     """Parse a stored signed event into its display schema. Pure.
 
     The stored value is our own verbatim write, so a parse failure means DB
@@ -77,10 +106,12 @@ def nostr_proof_from_stored(event_json: str | None) -> NostrProofResponse | None
         return NostrProofResponse(
             event_json=event_json,
             event_id=event["id"],
+            note_id=note_from_hex(event["id"]),
             pubkey=event["pubkey"],
             npub=npub_from_hex(event["pubkey"]),
             kind=event["kind"],
             created_at=event["created_at"],
+            relay_results=_relay_results_from_stored(relay_results_json),
         )
     except Exception:
         return None
@@ -208,7 +239,9 @@ async def get_split_proof(
         split_rule_id=payment.split_rule_id,
         split_rule_version=split_rule_version,
         rule_fingerprint=payment.rule_fingerprint,
-        nostr_proof=nostr_proof_from_stored(payment.nostr_proof_event),
+        nostr_proof=nostr_proof_from_stored(
+            payment.nostr_proof_event, payment.nostr_relay_results
+        ),
         rows=_proof_rows(payment),
     )
 
@@ -236,6 +269,11 @@ async def sign_split_proof(
     rotated) a fresh event replaces it — one column, so duplicates are
     impossible by construction. Missing preimages/fingerprint do NOT block
     signing: they are included as honest nulls (see services/nostr_proof.py).
+
+    A FRESHLY signed event is then best-effort published to the configured
+    relays (after it is committed, so nothing about publishing can affect
+    signing). The idempotent early return does not re-publish — retrying
+    flaky relays is exactly what POST /{id}/proof/publish is for.
     """
     if not settings.nostr_seckey.strip():
         raise HTTPException(
@@ -290,7 +328,9 @@ async def sign_split_proof(
             and stored.get("content") == bundle
             and stored.get("pubkey") == derived_pubkey
         ):
-            return nostr_proof_from_stored(payment.nostr_proof_event)
+            return nostr_proof_from_stored(
+                payment.nostr_proof_event, payment.nostr_relay_results
+            )
 
     event = sign_proof_event(seckey, bundle, int(settled_at.timestamp()))
     # Verify-on-generate: never persist an event we could not verify ourselves.
@@ -301,5 +341,83 @@ async def sign_split_proof(
         )
 
     payment.nostr_proof_event = json.dumps(event, separators=(",", ":"), ensure_ascii=False)
+    # A fresh event replaces the old one, so previously recorded publish
+    # outcomes describe an event this row no longer holds — drop them.
+    payment.nostr_relay_results = None
     await session.commit()
-    return nostr_proof_from_stored(payment.nostr_proof_event)
+
+    # Money-safe by ordering: the signed event is committed above, so nothing
+    # the best-effort publish does can affect signing (or anything else).
+    await _publish_and_record(payment, session)
+    return nostr_proof_from_stored(
+        payment.nostr_proof_event, payment.nostr_relay_results
+    )
+
+
+async def _publish_and_record(payment: Payment, session: AsyncSession) -> None:
+    """Best-effort publish of the stored signed event + persist the results.
+
+    Never raises — a failure here (relays down, DB hiccup on the result
+    write) must never fail a sign/publish request that already did its job.
+
+    Publishing runs INSIDE the request but hard-bounded by the per-relay
+    timeout (relays are tried concurrently, so ~RELAY_TIMEOUT_SECONDS worst
+    case) rather than in a background task: the response can then carry the
+    per-relay outcomes, results persist on the same session with no
+    task-vs-session lifecycle races, and the flow stays deterministic to
+    test. With relays healthy this adds well under a second; with every
+    relay dead the request still returns, just at the timeout ceiling.
+    """
+    if not settings.nostr_relays or not payment.nostr_proof_event:
+        return
+    try:
+        event = json.loads(payment.nostr_proof_event)
+        results = await publish_event(event, settings.nostr_relays)
+        if not results:
+            return
+        payment.nostr_relay_results = json.dumps(results, separators=(",", ":"))
+        await session.commit()
+    except Exception:
+        logger.warning(
+            "nostr_publish_record_failed", payment_id=str(payment.id), exc_info=True
+        )
+        try:
+            await session.rollback()
+        except Exception:
+            pass
+
+
+@router.post("/{payment_id}/proof/publish", response_model=NostrProofResponse)
+async def publish_split_proof(
+    payment_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    tenant: Tenant = Depends(get_current_tenant),
+    session: AsyncSession = Depends(get_session),
+) -> NostrProofResponse:
+    """(Re-)publish this payment's already-signed proof event to the relays.
+
+    For flaky relays and relay-list changes: signing already publishes
+    best-effort, this retries on demand. Idempotent by construction — the
+    event is immutable once signed (its id is pinned to the payment, and
+    relays dedupe by event id), and the only write is refreshing the single
+    nostr_relay_results column. Same best-effort semantics as signing: relay
+    failures come back as per-relay results, never as an HTTP error, and
+    money state is never touched.
+    """
+    payment = await _load_payment(payment_id, tenant, session)
+    if not nostr_proof_from_stored(payment.nostr_proof_event):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This payment's proof has not been signed yet — sign it "
+            "before publishing",
+        )
+    if not settings.nostr_relays:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No Nostr relays are configured on this server "
+            "(set ORCHESTRATOR_NOSTR_RELAYS)",
+        )
+    await _publish_and_record(payment, session)
+    return nostr_proof_from_stored(
+        payment.nostr_proof_event, payment.nostr_relay_results
+    )

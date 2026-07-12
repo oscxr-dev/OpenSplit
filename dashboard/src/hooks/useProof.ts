@@ -29,3 +29,19 @@ export function useSignProof(paymentId: string) {
     },
   });
 }
+
+/** (Re-)publish an already-signed proof to the server's configured Nostr
+ *  relays. Best-effort on the backend: relay failures come back as per-relay
+ *  results, not HTTP errors. Refreshes the proof so the receipt shows them. */
+export function usePublishProof(paymentId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<NostrProof>({
+    mutationFn: async () => {
+      const res = await api.post(`/payments/${paymentId}/proof/publish`);
+      return res.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['proof', paymentId] });
+    },
+  });
+}

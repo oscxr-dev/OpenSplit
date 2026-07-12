@@ -458,6 +458,17 @@ class ProofIntegrity(BaseModel):
     balanced: bool  # True when split amounts + store remainder + pending remainder sum exactly to payment
 
 
+class NostrRelayResult(BaseModel):
+    """Outcome of one best-effort publish attempt of the signed proof event
+    to one relay (services/nostr_publish.py). Failures are first-class data —
+    the UI shows them honestly rather than hiding them."""
+
+    relay: str
+    ok: bool
+    at: str  # ISO-8601 UTC timestamp of the attempt
+    error: str | None = None
+
+
 class NostrProofResponse(BaseModel):
     """A stored team-signed Nostr proof event, plus parsed display fields.
 
@@ -468,10 +479,16 @@ class NostrProofResponse(BaseModel):
 
     event_json: str
     event_id: str
+    # NIP-19 "note1…" form of event_id — the identifier njump-style lookup
+    # services and Nostr clients accept directly.
+    note_id: str
     pubkey: str
     npub: str
     kind: int
     created_at: int
+    # Per-relay outcomes of the latest publish attempt; None when publishing
+    # was never attempted (e.g. no relays configured).
+    relay_results: list[NostrRelayResult] | None = None
 
 
 class SplitProofResponse(BaseModel):

@@ -24,6 +24,9 @@ dependencies = [
     "structlog>=24.4",
     # BIP-340 schnorr signing for Nostr proof events (libsecp256k1 bindings).
     "coincurve>=20",
+    # NIP-01 relay publishing of signed proof events (async WebSocket client;
+    # >=13 for the websockets.asyncio.client module).
+    "websockets>=13",
 ]
 
 [project.optional-dependencies]

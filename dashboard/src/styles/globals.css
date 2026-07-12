@@ -574,6 +574,17 @@ html[data-theme='light'] .os-modal.os-modal-light [class~='text-red-400'] {
   color: #b91c1c;
 }
 
+/* Split Proof receipt (relay publication + error states): the same
+   success/error hues as the modal overrides above, so accepted/failed relay
+   entries stay readable on light too */
+html[data-theme='light'] .split-proof-receipt [class~='text-emerald-300'] {
+  color: #047857;
+}
+html[data-theme='light'] .split-proof-receipt [class~='text-red-300'],
+html[data-theme='light'] .split-proof-receipt [class~='text-red-300/80'] {
+  color: #b91c1c;
+}
+
 /* Primary Save button → pink (a white default button would vanish on white) */
 html[data-theme='light'] .os-modal.os-modal-light button[type='submit'] {
   background-color: #ff2d78;

@@ -45,6 +45,17 @@ def npub_from_hex(pubkey_hex: str) -> str:
     return bech32_encode("npub", data)
 
 
+def note_from_hex(event_id_hex: str) -> str:
+    """Encode a 64-hex event id as its NIP-19 ``note`` display form.
+
+    Same codec as npub with a different prefix — used to hand users an
+    identifier that njump-style lookup services and clients accept directly.
+    """
+    data = convertbits(bytes.fromhex(event_id_hex), 8, 5)
+    assert data is not None  # 32 bytes always convert cleanly to 5-bit groups
+    return bech32_encode("note", data)
+
+
 def normalize_nostr_pubkey(value: str) -> str:
     """Validate an npub or 64-hex public key; return lowercase hex.
 

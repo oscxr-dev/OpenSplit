@@ -211,6 +211,16 @@ export interface ProofIntegrity {
   balanced: boolean;
 }
 
+/** Outcome of one best-effort publish attempt of the signed proof event to
+ *  one Nostr relay. Failures are first-class data — shown, never hidden. */
+export interface NostrRelayResult {
+  relay: string;
+  ok: boolean;
+  /** ISO-8601 UTC timestamp of the attempt. */
+  at: string;
+  error?: string | null;
+}
+
 /** A team-signed Nostr proof event (kind 2718). `event_json` is the verbatim
  *  signed event — the copyable artifact any Nostr library can verify against
  *  `pubkey`/`npub`. Returned by POST /payments/{id}/proof/sign and embedded
@@ -218,10 +228,15 @@ export interface ProofIntegrity {
 export interface NostrProof {
   event_json: string;
   event_id: string;
+  /** NIP-19 `note1…` form of `event_id` — what njump-style lookups accept. */
+  note_id: string;
   pubkey: string;
   npub: string;
   kind: number;
   created_at: number;
+  /** Per-relay outcomes of the latest publish attempt; null when publishing
+   *  was never attempted (e.g. no relays configured on the server). */
+  relay_results?: NostrRelayResult[] | null;
 }
 
 export interface SplitProof {

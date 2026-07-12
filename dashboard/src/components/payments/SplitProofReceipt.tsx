@@ -1,6 +1,6 @@
-import { AlertCircle, CheckCircle, Clock, Copy, ExternalLink, KeyRound, ReceiptText, RotateCcw, ShieldCheck, Zap } from 'lucide-react';
+import { AlertCircle, CheckCircle, Clock, Copy, ExternalLink, KeyRound, Radio, ReceiptText, RotateCcw, ShieldCheck, Zap } from 'lucide-react';
 import { toast } from 'sonner';
-import { useProof, useSignProof } from '@/hooks/useProof';
+import { usePublishProof, useProof, useSignProof } from '@/hooks/useProof';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -65,6 +65,30 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
   // key itself lives on the server (env), never in the browser.
   const nostrProof = proof?.nostr_proof ?? null;
   const canSign = !nostrProof && payment.status === 'paid' && Boolean(tenant?.tenant.nostr_pubkey);
+  // Relay publication only exists for a signed proof; the backend publishes
+  // best-effort on sign and this button retries it (flaky/new relays).
+  const publishProof = usePublishProof(payment.id);
+  const relayResults = nostrProof?.relay_results ?? null;
+  const acceptedRelays = relayResults?.filter((result) => result.ok).length ?? 0;
+
+  function handlePublishProof() {
+    publishProof.mutate(undefined, {
+      onSuccess: (published) => {
+        const results = published.relay_results ?? [];
+        const accepted = results.filter((result) => result.ok).length;
+        if (accepted > 0) {
+          toast.success(`Proof accepted by ${accepted} of ${results.length} relays`);
+        } else {
+          toast.error('No relay accepted the proof — try again later');
+        }
+      },
+      onError: (error) => {
+        const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data
+          ?.detail;
+        toast.error(typeof detail === 'string' ? detail : 'Could not publish the proof');
+      },
+    });
+  }
 
   function handleSignProof() {
     signProof.mutate(undefined, {
@@ -325,6 +349,73 @@ export function SplitProofReceipt({ payment, onRetrySplit, retrying = false }: S
               <p className="mt-0.5 truncate font-mono text-[#94A3B8]" title={nostrProof.npub}>
                 verifies against {truncateMiddle(nostrProof.npub, 14, 8)}
               </p>
+
+              <div className="mt-2.5 border-t border-white/[0.08] pt-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+                  <p className="flex items-center gap-1.5 text-[#94A3B8]">
+                    <Radio className="h-3.5 w-3.5 shrink-0 text-[#FF2D78]" strokeWidth={1.8} />
+                    Relay publication
+                  </p>
+                  <button
+                    type="button"
+                    disabled={publishProof.isPending}
+                    onClick={handlePublishProof}
+                    className="inline-flex shrink-0 items-center gap-1 font-medium text-[#FF2D78] transition-colors hover:text-[#FF6DA6] disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    <Radio className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    {publishProof.isPending
+                      ? 'Publishing…'
+                      : relayResults
+                        ? 'Re-publish to relays'
+                        : 'Publish to relays'}
+                  </button>
+                </div>
+                {relayResults ? (
+                  <>
+                    <p className="mt-1.5 text-[#94A3B8]">
+                      {acceptedRelays > 0
+                        ? `Accepted by ${acceptedRelays} of ${relayResults.length} relays — retrievable by anyone with the event id.`
+                        : 'No relay has accepted this proof yet.'}
+                    </p>
+                    <ul className="mt-1.5 space-y-1">
+                      {relayResults.map((result) => (
+                        <li key={result.relay} className="flex items-start gap-1.5 font-mono text-xs">
+                          {result.ok ? (
+                            <CheckCircle className="mt-px h-3.5 w-3.5 shrink-0 text-emerald-300" strokeWidth={1.8} />
+                          ) : (
+                            <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0 text-red-300" strokeWidth={1.8} />
+                          )}
+                          <span className="min-w-0">
+                            <span className={cn('break-all', result.ok ? 'text-[#F5F5F7]' : 'text-red-300')}>
+                              {result.relay.replace(/^wss?:\/\//, '')}
+                            </span>
+                            {!result.ok && result.error && (
+                              <span className="block text-red-300/80">{result.error}</span>
+                            )}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                ) : (
+                  <p className="mt-1.5 text-[#94A3B8]">
+                    Not published to any relay yet — publish it so anyone can find and verify this
+                    proof on the open network.
+                  </p>
+                )}
+                {acceptedRelays > 0 && (
+                  <a
+                    href={`https://njump.me/${nostrProof.note_id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1.5 inline-flex items-center gap-1 font-medium text-[#FF2D78] transition-colors hover:text-[#FF6DA6]"
+                    title={nostrProof.note_id}
+                  >
+                    Look it up on njump
+                    <ExternalLink className="h-3 w-3" />
+                  </a>
+                )}
+              </div>
             </div>
           )}
           {canSign && (
