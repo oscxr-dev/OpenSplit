@@ -1,5 +1,5 @@
 import { format, parseISO } from 'date-fns';
-import { enUS } from 'date-fns/locale';
+import i18n, { dateFnsLocale } from '@/i18n';
 
 export function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ');
@@ -18,16 +18,27 @@ export function formatFiat(amount: number | null, currency: string | null): stri
   }).format(amount);
 }
 
+const PAYOUT_STATUS_KEYS: Record<string, string> = {
+  paid: 'payments.status.paid',
+  pending: 'payments.status.pending',
+  in_progress: 'payments.status.inProgress',
+  completed: 'payments.status.completed',
+  failed: 'payments.status.failed',
+  cancelled: 'payments.status.cancelled',
+};
+
 export function payoutStatusLabel(status: string): string {
-  const labels: Record<string, string> = {
-    paid: 'Paid',
-    pending: 'Pending',
-    in_progress: 'In progress',
-    completed: 'Completed',
-    failed: 'Failed',
-    cancelled: 'Cancelled',
-  };
-  return labels[status] || status;
+  const key = PAYOUT_STATUS_KEYS[status];
+  return key ? i18n.t(key) : status;
+}
+
+/** Badge variant for a raw payout status — keyed on the status itself so it
+ *  stays correct regardless of the UI language the label is rendered in. */
+export function payoutStatusVariant(status: string): 'default' | 'success' | 'warning' | 'error' {
+  if (status === 'paid' || status === 'completed') return 'success';
+  if (status === 'pending' || status === 'in_progress') return 'warning';
+  if (status === 'failed' || status === 'cancelled') return 'error';
+  return 'default';
 }
 
 export function formatSatsCompact(sats: number): string {
@@ -45,7 +56,7 @@ export function formatSatsCompact(sats: number): string {
 export function formatDate(date: string | null): string {
   if (!date) return '—';
   try {
-    return format(parseISO(date), 'dd MMM yyyy HH:mm', { locale: enUS });
+    return format(parseISO(date), 'dd MMM yyyy HH:mm', { locale: dateFnsLocale() });
   } catch {
     return '—';
   }
@@ -54,7 +65,7 @@ export function formatDate(date: string | null): string {
 export function formatDateShort(date: string | null): string {
   if (!date) return '—';
   try {
-    return format(parseISO(date), 'MM/dd HH:mm', { locale: enUS });
+    return format(parseISO(date), 'MM/dd HH:mm', { locale: dateFnsLocale() });
   } catch {
     return '—';
   }

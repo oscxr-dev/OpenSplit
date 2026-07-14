@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Layers, Sparkles, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { TopBar } from '@/components/layout/TopBar';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { ErrorState } from '@/components/shared/ErrorState';
@@ -39,6 +40,7 @@ function StatCard({ label, value, icon: Icon }: { label: string; value: number; 
 }
 
 export function PublicTeamsPage() {
+  const { t } = useTranslation();
   const { data, isLoading, isError, refetch } = usePublicTeams();
   const teams = useMemo(() => data ?? [], [data]);
   const [query, setQuery] = useState('');
@@ -70,9 +72,9 @@ export function PublicTeamsPage() {
       <main className="mx-auto max-w-6xl space-y-5 px-4 pb-32 pt-3 sm:px-6 sm:pt-4 md:pb-8 lg:px-8">
         {/* Small stats — activity metadata only, never money volume. */}
         <div className="grid gap-3 sm:grid-cols-3">
-          <StatCard label="Public teams" value={stats.teamCount} icon={Users} />
-          <StatCard label="Public splits" value={stats.publicSplits} icon={Layers} />
-          <StatCard label="Recently active teams" value={stats.recentlyActive} icon={Sparkles} />
+          <StatCard label={t('public.stats.publicTeams')} value={stats.teamCount} icon={Users} />
+          <StatCard label={t('public.stats.publicSplits')} value={stats.publicSplits} icon={Layers} />
+          <StatCard label={t('public.stats.recentlyActive')} value={stats.recentlyActive} icon={Sparkles} />
         </div>
 
         {isLoading ? (
@@ -81,7 +83,7 @@ export function PublicTeamsPage() {
             <Skeleton className="h-64 w-full" />
           </div>
         ) : isError ? (
-          <ErrorState message="Could not load public teams" onRetry={() => refetch()} />
+          <ErrorState message={t('public.loadError')} onRetry={() => refetch()} />
         ) : (
           <>
             {/* World map */}

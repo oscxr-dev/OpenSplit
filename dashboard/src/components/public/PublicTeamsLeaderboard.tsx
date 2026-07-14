@@ -1,5 +1,6 @@
 import { ArrowUpRight, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { relativeTime } from '@/lib/time';
 import type { PublicTeamSummary } from '@/types/api';
@@ -10,12 +11,13 @@ function locationLabel(team: PublicTeamSummary): string | null {
 }
 
 export function PublicTeamsLeaderboard({ teams }: { teams: PublicTeamSummary[] }) {
+  const { t } = useTranslation();
   if (teams.length === 0) {
     return (
       <EmptyState
         icon={<Users className="h-7 w-7" />}
-        message="No public teams match your search"
-        description="Try a different name, or check back as more teams turn their public proof page on."
+        message={t('public.leaderboard.emptyTitle')}
+        description={t('public.leaderboard.emptyDescription')}
       />
     );
   }
@@ -38,17 +40,17 @@ export function PublicTeamsLeaderboard({ teams }: { teams: PublicTeamSummary[] }
               <div className="flex flex-wrap items-center justify-between gap-4 sm:justify-end">
                 <div className="text-right">
                   <p className="font-semibold tabular-nums text-[#F5F5F7]">{team.completed_splits}</p>
-                  <p className="text-[11px] text-[#94A3B8]">splits</p>
+                  <p className="text-[11px] text-[#94A3B8]">{t('public.leaderboard.splits')}</p>
                 </div>
                 <div className="hidden text-right sm:block">
                   <p className="text-xs text-[#94A3B8]">{relativeTime(team.last_activity)}</p>
-                  <p className="text-[11px] text-[#94A3B8]">last activity</p>
+                  <p className="text-[11px] text-[#94A3B8]">{t('public.leaderboard.lastActivity')}</p>
                 </div>
                 <Link
                   to={`/public/${team.slug}`}
                   className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-lg border border-white/[0.10] bg-white/[0.04] px-3 text-sm font-medium text-[#F5F5F7] transition-colors hover:border-[#FF2D78]/40 hover:bg-[#FF2D78]/[0.08]"
                 >
-                  View proof
+                  {t('public.leaderboard.viewProof')}
                   <ArrowUpRight className="h-4 w-4 text-[#FF2D78]" />
                 </Link>
               </div>

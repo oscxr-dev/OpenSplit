@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Check, ExternalLink, Minus, PlugZap, X } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -27,7 +28,13 @@ function apiErrorMessage(error: unknown, fallback: string) {
 /** One row of the connection-test checklist. `state === null` means the check
  *  never ran because an earlier step already failed. */
 function CheckRow({ label, state }: { label: string; state: boolean | null }) {
-  const status = state === null ? 'not checked' : state ? 'passed' : 'failed';
+  const { t } = useTranslation();
+  const status =
+    state === null
+      ? t('settings.btcpay.notChecked')
+      : state
+        ? t('settings.btcpay.checkPassed')
+        : t('settings.btcpay.checkFailed');
   const Icon = state === null ? Minus : state ? Check : X;
   return (
     <li aria-label={`${label}: ${status}`} className="flex items-center gap-2.5 text-sm">
@@ -44,12 +51,13 @@ function CheckRow({ label, state }: { label: string; state: boolean | null }) {
       <span className={cn('font-medium', state === false ? 'text-red-300' : 'text-[#F5F5F7]')}>
         {label}
       </span>
-      {state === null && <span className="text-xs text-[#94A3B8]">not checked</span>}
+      {state === null && <span className="text-xs text-[#94A3B8]">{t('settings.btcpay.notChecked')}</span>}
     </li>
   );
 }
 
 export function BtcPayConnectionPanel() {
+  const { t } = useTranslation();
   const { tenant, refreshTenant } = useAuth();
   const info = tenant?.tenant;
   const savedUrl = info?.btcpay_url ?? '';
@@ -82,7 +90,7 @@ export function BtcPayConnectionPanel() {
 
   const urlError =
     trimmedUrl && trimmedUrl !== savedUrl && !isValidServerUrl(trimmedUrl)
-      ? 'Enter a full URL — https://btcpay.example.com, http://localhost:3003, or http://host.docker.internal:3003'
+      ? t('settings.btcpay.urlError')
       : undefined;
 
   // Only meaningful diffs are sent; blanks never wipe stored values (the
@@ -107,9 +115,9 @@ export function BtcPayConnectionPanel() {
       await refreshTenant();
       setApiKey('');
       setTestResult(null); // stale against the new configuration
-      toast.success('BTCPay connection saved');
+      toast.success(t('settings.btcpay.saved'));
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Could not save BTCPay connection'));
+      toast.error(apiErrorMessage(error, t('settings.btcpay.saveError')));
     } finally {
       setSaving(false);
     }
@@ -122,7 +130,7 @@ export function BtcPayConnectionPanel() {
       const res = await api.post<BtcPayConnectionTest>('/tenants/me/btcpay/test');
       setTestResult(res.data);
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Could not run the connection test'));
+      toast.error(apiErrorMessage(error, t('settings.btcpay.testError')));
     } finally {
       setTesting(false);
     }
@@ -137,46 +145,45 @@ export function BtcPayConnectionPanel() {
       const browserUrl = toBrowserUrl(res.data.authorize_url, window.location.hostname);
       window.open(browserUrl, '_blank', 'noopener,noreferrer');
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Save the BTCPay server URL first'));
+      toast.error(apiErrorMessage(error, t('settings.btcpay.authorizeError')));
     } finally {
       setOpening(false);
     }
   }
 
   const urlHint = isDockerHostUrl(savedUrl) && trimmedUrl === savedUrl
-    ? `Server-side address; links open via ${window.location.hostname} in your browser.`
-    : 'The address OpenSplit’s server uses to reach BTCPay — must start with http:// or https://';
+    ? t('settings.btcpay.urlHintDocker', { hostname: window.location.hostname })
+    : t('settings.btcpay.urlHint');
 
   return (
     <div className="p-6 sm:p-8">
       <div className="flex flex-wrap items-center gap-3">
         <PlugZap className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
-        <h2 className="font-semibold text-[#F5F5F7]">BTCPay connection</h2>
+        <h2 className="font-semibold text-[#F5F5F7]">{t('settings.btcpay.title')}</h2>
         {/* Unconfigured is a setup state, not an error. */}
         <Badge variant={connected ? 'success' : configured ? 'error' : 'default'}>
-          {connected ? 'Connected' : configured ? 'Disconnected' : 'Not connected'}
+          {connected ? t('settings.btcpay.connected') : configured ? t('settings.btcpay.disconnected') : t('settings.btcpay.notConnected')}
         </Badge>
       </div>
       <p className="mt-2 text-sm text-[#94A3B8]">
-        OpenSplit reads settled invoices and sends split payouts through your own BTCPay Server.
-        Nothing is custodied here.
+        {t('settings.btcpay.description')}
       </p>
 
       {!configured && (
         <div className="mt-4 rounded-2xl border border-white/[0.10] bg-white/[0.03] px-4 py-3 text-sm text-[#94A3B8]">
-          <span className="font-semibold text-[#F5F5F7]">Not connected yet.</span> Save your BTCPay
-          server URL, create an API key with the minimal permissions using the button below, then
-          paste the key and your store ID here.
+          <span className="font-semibold text-[#F5F5F7]">{t('settings.btcpay.setupCtaTitle')}</span>{' '}
+          {t('settings.btcpay.setupCtaBody')}
         </div>
       )}
 
       <div className="mt-5 grid gap-4 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <Input
-            label="BTCPay server URL"
+            label={t('settings.btcpay.serverUrl')}
+            id="btcpay-server-url"
             value={url}
             onChange={(event) => setUrl(event.target.value)}
-            placeholder="https://your-btcpay-server.example"
+            placeholder={t('settings.btcpay.urlPlaceholder')}
             spellCheck={false}
             autoComplete="off"
             error={urlError}
@@ -184,28 +191,26 @@ export function BtcPayConnectionPanel() {
           />
         </div>
         <Input
-          label="Store ID"
+          label={t('settings.btcpay.storeId')}
+          id="btcpay-store-id"
           value={storeId}
           onChange={(event) => setStoreId(event.target.value)}
-          placeholder="Your BTCPay store ID"
+          placeholder={t('settings.btcpay.storeIdPlaceholder')}
           spellCheck={false}
           autoComplete="off"
           maxLength={64}
-          hint="Copy it from your BTCPay store settings."
+          hint={t('settings.btcpay.storeIdHint')}
         />
         <Input
-          label="API key"
+          label={t('settings.btcpay.apiKey')}
+          id="btcpay-api-key"
           type="password"
           value={apiKey}
           onChange={(event) => setApiKey(event.target.value)}
-          placeholder={keySet ? `•••• ${keyLast4 ?? ''}`.trim() : 'Paste your BTCPay API key'}
+          placeholder={keySet ? `•••• ${keyLast4 ?? ''}`.trim() : t('settings.btcpay.apiKeyPlaceholder')}
           spellCheck={false}
           autoComplete="new-password"
-          hint={
-            keySet
-              ? 'Greenfield API key — the stored value is never shown. Enter a new key to replace it.'
-              : 'Greenfield API key — the stored value is never shown.'
-          }
+          hint={keySet ? t('settings.btcpay.apiKeyHintReplace') : t('settings.btcpay.apiKeyHint')}
         />
       </div>
 
@@ -217,10 +222,10 @@ export function BtcPayConnectionPanel() {
             onClick={openAuthorize}
             loading={opening}
             disabled={!savedUrl || opening}
-            title={!savedUrl ? 'Save the server URL first' : undefined}
+            title={!savedUrl ? t('settings.btcpay.saveUrlFirst') : undefined}
           >
             <ExternalLink className="h-4 w-4" strokeWidth={1.8} />
-            Open BTCPay to create an API key
+            {t('settings.btcpay.openBtcpay')}
           </Button>
           <Button
             variant="outline"
@@ -230,36 +235,35 @@ export function BtcPayConnectionPanel() {
             disabled={!configured || testing || dirty}
             title={
               dirty
-                ? 'Save your changes first'
+                ? t('settings.btcpay.saveChangesFirst')
                 : !configured
-                  ? 'Save the server URL, store ID, and API key first'
+                  ? t('settings.btcpay.saveAllFirst')
                   : undefined
             }
           >
-            Test connection
+            {t('settings.btcpay.testConnection')}
           </Button>
         </div>
         <div className="flex items-center gap-2 sm:shrink-0">
           {dirty && (
             <Button variant="ghost" size="sm" onClick={discardChanges} disabled={saving}>
-              Discard
+              {t('settings.btcpay.discard')}
             </Button>
           )}
           <Button variant="primary" size="sm" onClick={saveConnection} loading={saving} disabled={!canSave}>
-            Save connection
+            {t('settings.btcpay.saveConnection')}
           </Button>
         </div>
       </div>
 
       {!savedUrl && (
         <p className="mt-2 text-xs text-[#94A3B8]">
-          The API-key button unlocks once the server URL is saved.
+          {t('settings.btcpay.unlockHint')}
         </p>
       )}
       {dirty && (
         <p className="mt-2 text-xs font-medium text-orange-200">
-          Unsaved changes — Test connection runs against the last saved values, so save your
-          changes first (or discard them).
+          {t('settings.btcpay.unsavedChanges')}
         </p>
       )}
 
@@ -275,13 +279,13 @@ export function BtcPayConnectionPanel() {
         >
           {dirty && (
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.14em] text-orange-200">
-              Stale — settings changed after this test ran
+              {t('settings.btcpay.stale')}
             </p>
           )}
           <ul className="space-y-2.5">
-            <CheckRow label="Server reachable" state={testResult.url_reachable} />
-            <CheckRow label="API key valid" state={testResult.auth_ok} />
-            <CheckRow label="Store found" state={testResult.store_found} />
+            <CheckRow label={t('settings.btcpay.serverReachable')} state={testResult.url_reachable} />
+            <CheckRow label={t('settings.btcpay.apiKeyValid')} state={testResult.auth_ok} />
+            <CheckRow label={t('settings.btcpay.storeFound')} state={testResult.store_found} />
           </ul>
           <p
             className={cn(

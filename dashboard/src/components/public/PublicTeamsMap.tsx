@@ -3,6 +3,7 @@ import { ComposableMap, Geographies, Geography, Marker, ZoomableGroup } from 're
 import geographyData from 'world-atlas/countries-110m.json';
 import { ArrowUpRight, MapPin, Minus, Plus, RotateCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { countryCoordinates } from '@/lib/geo';
 import { relativeTime } from '@/lib/time';
 import { useTheme } from '@/hooks/useTheme';
@@ -26,6 +27,7 @@ const MIN_ZOOM = 1;
 const MAX_ZOOM = 5;
 
 export function PublicTeamsMap({ teams }: { teams: PublicTeamSummary[] }) {
+  const { t } = useTranslation();
   const located = useMemo<LocatedTeam[]>(
     () =>
       teams
@@ -70,7 +72,7 @@ export function PublicTeamsMap({ teams }: { teams: PublicTeamSummary[] }) {
           type="button"
           onClick={() => adjustZoom(0.5)}
           className="inline-flex h-9 w-9 items-center justify-center text-[#F5F5F7] transition hover:bg-white/[0.08]"
-          aria-label="Zoom in"
+          aria-label={t('public.map.zoomIn')}
         >
           <Plus className="h-4 w-4" strokeWidth={1.8} />
         </button>
@@ -78,7 +80,7 @@ export function PublicTeamsMap({ teams }: { teams: PublicTeamSummary[] }) {
           type="button"
           onClick={() => adjustZoom(-0.5)}
           className="inline-flex h-9 w-9 items-center justify-center border-l border-white/[0.10] text-[#F5F5F7] transition hover:bg-white/[0.08]"
-          aria-label="Zoom out"
+          aria-label={t('public.map.zoomOut')}
         >
           <Minus className="h-4 w-4" strokeWidth={1.8} />
         </button>
@@ -86,7 +88,7 @@ export function PublicTeamsMap({ teams }: { teams: PublicTeamSummary[] }) {
           type="button"
           onClick={resetMap}
           className="inline-flex h-9 w-9 items-center justify-center border-l border-white/[0.10] text-[#F5F5F7] transition hover:bg-white/[0.08]"
-          aria-label="Reset map"
+          aria-label={t('public.map.reset')}
         >
           <RotateCcw className="h-4 w-4" strokeWidth={1.8} />
         </button>
@@ -99,7 +101,7 @@ export function PublicTeamsMap({ teams }: { teams: PublicTeamSummary[] }) {
         width={900}
         height={500}
         style={{ width: '100%', height: '100%' }}
-        aria-label="Map of public OpenSplit teams"
+        aria-label={t('public.map.aria')}
       >
         <ZoomableGroup
           center={position.coordinates}
@@ -157,16 +159,16 @@ export function PublicTeamsMap({ teams }: { teams: PublicTeamSummary[] }) {
               <p className="mt-1 font-mono text-[11px] text-[#94A3B8]">/public/{active.slug}</p>
             </div>
             <span className="rounded-full border border-[#FF2D78]/25 bg-[#FF2D78]/10 px-2 py-1 text-[11px] font-semibold text-[#FF2D78]">
-              {active.country ?? 'Public'}
+              {active.country ?? t('public.map.publicBadge')}
             </span>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3">
-              <p className="text-[11px] text-[#94A3B8]">Completed splits</p>
+              <p className="text-[11px] text-[#94A3B8]">{t('public.map.completedSplits')}</p>
               <p className="mt-1 font-mono text-lg font-semibold text-[#F5F5F7]">{active.completed_splits}</p>
             </div>
             <div className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-3">
-              <p className="text-[11px] text-[#94A3B8]">Last activity</p>
+              <p className="text-[11px] text-[#94A3B8]">{t('public.map.lastActivity')}</p>
               <p className="mt-1 text-sm font-semibold text-[#F5F5F7]">{relativeTime(active.last_activity)}</p>
             </div>
           </div>
@@ -174,7 +176,7 @@ export function PublicTeamsMap({ teams }: { teams: PublicTeamSummary[] }) {
             to={`/public/${active.slug}`}
             className="mt-4 inline-flex items-center justify-center gap-1 rounded-full border border-[#FF2D78]/25 bg-[#FF2D78]/10 px-3 py-2 text-xs font-semibold text-[#FF2D78] transition-colors hover:bg-[#FF2D78]/15 hover:text-[#FF6AB6]"
           >
-            View public page <ArrowUpRight className="h-3.5 w-3.5" />
+            {t('public.map.viewPublicPage')} <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
       )}
@@ -182,7 +184,7 @@ export function PublicTeamsMap({ teams }: { teams: PublicTeamSummary[] }) {
       {unknownCount > 0 && (
         <div className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 rounded-full border border-white/[0.10] bg-[#11131F]/90 px-3 py-1 text-[11px] font-medium text-[#94A3B8]">
           <MapPin className="h-3.5 w-3.5" />
-          {unknownCount} under Unknown location
+          {t('public.map.unknownLocation', { count: unknownCount })}
         </div>
       )}
     </div>

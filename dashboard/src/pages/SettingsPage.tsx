@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Check, Coins, Globe2, Info, KeyRound, Link2, LogOut, MapPin, Moon, ShieldCheck, Store, Sun } from 'lucide-react';
+import { Check, Coins, Globe2, Info, KeyRound, Languages, Link2, LogOut, MapPin, Moon, ShieldCheck, Store, Sun } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -21,24 +22,31 @@ import type { SplitRule, TenantResponse } from '@/types/api';
 const themeOptions = [
   {
     value: 'dark' as const,
-    label: 'Dark',
-    description: 'Deep surfaces for the proof canvas.',
+    labelKey: 'settings.theme.dark',
+    descriptionKey: 'settings.theme.darkDescription',
     icon: Moon,
   },
   {
     value: 'light' as const,
-    label: 'Light',
-    description: 'A brighter shell with strong contrast.',
+    labelKey: 'settings.theme.light',
+    descriptionKey: 'settings.theme.lightDescription',
     icon: Sun,
   },
 ];
 
+// Dashboard languages. The option labels stay in their own language (standard
+// language-picker convention), so they live here rather than in the catalogs.
+const languageOptions = [
+  { value: 'en' as const, label: 'English' },
+  { value: 'es' as const, label: 'Español' },
+];
+
 // Client-side tabs, deep-linkable via the URL hash (/settings#public-page).
 const SETTINGS_TABS = [
-  { id: 'connection', label: 'Connection' },
-  { id: 'store', label: 'Store' },
-  { id: 'public-page', label: 'Public page' },
-  { id: 'appearance', label: 'Appearance' },
+  { id: 'connection', labelKey: 'settings.tabs.connection' },
+  { id: 'store', labelKey: 'settings.tabs.store' },
+  { id: 'public-page', labelKey: 'settings.tabs.publicPage' },
+  { id: 'appearance', labelKey: 'settings.tabs.appearance' },
 ] as const;
 
 type SettingsTabId = (typeof SETTINGS_TABS)[number]['id'];
@@ -83,6 +91,7 @@ function allocationTotal(rule?: SplitRule | null) {
 }
 
 export function SettingsPage() {
+  const { t, i18n } = useTranslation();
   const { theme, setTheme } = useTheme();
   const { logout, tenant, refreshTenant } = useAuth();
   const { data: splitRules = [], isLoading: splitRulesLoading } = useSplits();
@@ -178,10 +187,10 @@ export function SettingsPage() {
     try {
       await patchTenantSettings(
         { name: trimmedName },
-        { success: 'Store name updated', nextSlug: savedSlug }
+        { success: t('settings.nameUpdated'), nextSlug: savedSlug }
       );
     } catch {
-      toast.error('Could not update store name');
+      toast.error(t('settings.nameUpdateError'));
     } finally {
       setSavingName(false);
     }
@@ -207,13 +216,13 @@ export function SettingsPage() {
       await patchTenantSettings(
         { public_slug: normalizedSlug },
         {
-          success: 'Public URL updated',
+          success: t('settings.urlUpdated'),
           previousSlug: savedSlug,
           nextSlug: normalizedSlug,
         }
       );
     } catch {
-      toast.error('Could not update public URL');
+      toast.error(t('settings.urlUpdateError'));
     } finally {
       setSavingSlug(false);
     }
@@ -239,10 +248,10 @@ export function SettingsPage() {
     try {
       await patchTenantSettings(
         { public_country: country.trim(), public_city: city.trim() },
-        { success: 'Location updated', nextSlug: savedSlug }
+        { success: t('settings.locationUpdated'), nextSlug: savedSlug }
       );
     } catch {
-      toast.error('Could not update location');
+      toast.error(t('settings.locationUpdateError'));
     } finally {
       setSavingLocation(false);
     }
@@ -255,12 +264,12 @@ export function SettingsPage() {
       await patchTenantSettings(
         { public_transparency_enabled: nextValue },
         {
-          success: nextValue ? 'Public proof enabled' : 'Public proof disabled',
+          success: nextValue ? t('settings.publicProofEnabled') : t('settings.publicProofDisabled'),
           nextSlug: savedSlug,
         }
       );
     } catch {
-      toast.error('Could not update public proof');
+      toast.error(t('settings.publicProofError'));
     } finally {
       setSavingPublicProof(false);
       setConfirmPublicProofOpen(false);
@@ -278,12 +287,12 @@ export function SettingsPage() {
       await patchTenantSettings(
         { public_show_amounts: nextValue },
         {
-          success: nextValue ? 'Amounts now visible on the public page' : 'Amounts hidden on the public page',
+          success: nextValue ? t('settings.amountsVisible') : t('settings.amountsHidden'),
           nextSlug: savedSlug,
         }
       );
     } catch {
-      toast.error('Could not update amount visibility');
+      toast.error(t('settings.amountsError'));
     } finally {
       setSavingShowAmounts(false);
       setConfirmShowAmountsOpen(false);
@@ -309,7 +318,7 @@ export function SettingsPage() {
     // Defense in depth: the backend rejects nsec too, but a private key must
     // not even leave the browser in a request body.
     if (trimmed.toLowerCase().startsWith('nsec')) {
-      toast.error('That is a PRIVATE key (nsec) — never paste it here. Enter your public npub instead.');
+      toast.error(t('settings.nsecRejected'));
       return;
     }
     setSavingNostrKey(true);
@@ -317,7 +326,7 @@ export function SettingsPage() {
       // A blank value explicitly clears the saved key.
       await patchTenantSettings(
         { nostr_pubkey: trimmed },
-        { success: trimmed ? 'Nostr public key saved' : 'Nostr public key removed', nextSlug: savedSlug }
+        { success: trimmed ? t('settings.nostrKeySaved') : t('settings.nostrKeyRemoved'), nextSlug: savedSlug }
       );
     } catch (error) {
       const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
@@ -326,7 +335,7 @@ export function SettingsPage() {
           ? detail
           : Array.isArray(detail) && typeof detail[0]?.msg === 'string'
             ? detail[0].msg
-            : 'Could not save the Nostr public key'
+            : t('settings.nostrKeyError')
       );
     } finally {
       setSavingNostrKey(false);
@@ -335,7 +344,7 @@ export function SettingsPage() {
 
   async function toggleRulePublic(rule: SplitRule) {
     if (!publicPageOn) {
-      toast.error('Turn Public proof on before publishing rules');
+      toast.error(t('settings.turnOnFirst'));
       return;
     }
 
@@ -345,9 +354,9 @@ export function SettingsPage() {
         public_enabled: !rule.public_enabled,
         slug: publicSlug,
       });
-      toast.success(!rule.public_enabled ? 'Rule is public' : 'Rule hidden from public page');
+      toast.success(!rule.public_enabled ? t('settings.rulePublicToast') : t('settings.ruleHiddenToast'));
     } catch {
-      toast.error('Could not update public rule');
+      toast.error(t('settings.rulePublicError'));
     }
   }
 
@@ -356,7 +365,7 @@ export function SettingsPage() {
       <div className="overflow-x-auto">
         <div
           role="tablist"
-          aria-label="Settings sections"
+          aria-label={t('settings.tabsAria')}
           className="flex w-max min-w-full gap-1 rounded-full border border-white/[0.08] bg-white/[0.035] p-1 sm:w-full"
         >
           {SETTINGS_TABS.map((tab, index) => {
@@ -383,7 +392,7 @@ export function SettingsPage() {
                     : 'text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F5F5F7]'
                 )}
               >
-                {tab.label}
+                {t(tab.labelKey)}
               </button>
             );
           })}
@@ -393,7 +402,7 @@ export function SettingsPage() {
       {activeTab === 'connection' && (
         <div {...tabPanelProps('connection')} className="space-y-6">
           <div className="space-y-3">
-            <h2 className="font-semibold text-[#F5F5F7]">Pipeline status</h2>
+            <h2 className="font-semibold text-[#F5F5F7]">{t('settings.pipelineStatus')}</h2>
             <StatusStrip />
           </div>
 
@@ -409,10 +418,10 @@ export function SettingsPage() {
                 {/* Privacy: the tenant UUID stays collapsed by default — only shown on demand. */}
                 <details>
                   <summary className="cursor-pointer select-none text-xs font-medium text-[#94A3B8] transition hover:text-[#F5F5F7]">
-                    Advanced
+                    {t('settings.advanced')}
                   </summary>
                   <p className="mt-1 font-mono text-xs text-[#94A3B8]">
-                    Workspace ID: {tenant?.tenant.id ?? 'workspace pending'}
+                    {t('settings.workspaceId', { id: tenant?.tenant.id ?? t('settings.workspacePending') })}
                   </p>
                 </details>
               </div>
@@ -430,22 +439,22 @@ export function SettingsPage() {
                   <div className="w-full sm:max-w-sm">
                     <div className="flex items-center justify-center gap-3 sm:justify-start">
                       <Store className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
-                      <h2 className="font-semibold text-[#F5F5F7]">Store name</h2>
+                      <h2 className="font-semibold text-[#F5F5F7]">{t('settings.storeName')}</h2>
                       <InfoTip>
-                        The display name shown inside OpenSplit and on the public proof page. It does not change historical Split Proof records.
+                        {t('settings.storeNameTip')}
                       </InfoTip>
                     </div>
                     <Input
                       className="mt-4"
                       value={storeName}
                       onChange={(event) => setStoreName(event.target.value)}
-                      placeholder="Your team"
-                      aria-label="Store or team name"
+                      placeholder={t('settings.storeNamePlaceholder')}
+                      aria-label={t('settings.storeNameAria')}
                       maxLength={255}
                     />
                   </div>
                   <Button variant="primary" size="sm" onClick={saveStoreName} loading={savingName} disabled={!nameDirty} className="shrink-0">
-                    Save name
+                    {t('settings.saveName')}
                   </Button>
                 </div>
               </div>
@@ -455,9 +464,9 @@ export function SettingsPage() {
                   <div className="w-full sm:max-w-sm">
                     <div className="flex items-center justify-center gap-3 sm:justify-start">
                       <Link2 className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
-                      <h2 className="font-semibold text-[#F5F5F7]">Public URL</h2>
+                      <h2 className="font-semibold text-[#F5F5F7]">{t('settings.publicUrl')}</h2>
                       <InfoTip>
-                        The stable public link for this team. Keep it short and readable so visitors can verify payment proofs later.
+                        {t('settings.publicUrlTip')}
                       </InfoTip>
                     </div>
                     <div className="mt-4 flex items-center gap-2">
@@ -465,18 +474,18 @@ export function SettingsPage() {
                       <Input
                         value={slugInput}
                         onChange={(event) => setSlugInput(event.target.value)}
-                        placeholder="your-team"
-                        aria-label="Public URL slug"
+                        placeholder={t('settings.publicUrlPlaceholder')}
+                        aria-label={t('settings.publicUrlAria')}
                         maxLength={120}
                         spellCheck={false}
                       />
                     </div>
                     <p className="mt-2 font-mono text-xs text-[#94A3B8]">
-                      Opens at <span className="text-[#F5F5F7]">/public/{normalizedSlug || 'your-store'}</span>
+                      {t('settings.opensAt')} <span className="text-[#F5F5F7]">/public/{normalizedSlug || t('settings.yourStoreFallback')}</span>
                     </p>
                   </div>
                   <Button variant="primary" size="sm" onClick={savePublicSlug} loading={savingSlug} disabled={!slugDirty} className="shrink-0">
-                    Save URL
+                    {t('settings.saveUrl')}
                   </Button>
                 </div>
               </div>
@@ -486,30 +495,30 @@ export function SettingsPage() {
                   <div className="w-full sm:max-w-md">
                     <div className="flex items-center justify-center gap-3 sm:justify-start">
                       <MapPin className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
-                      <h2 className="font-semibold text-[#F5F5F7]">Public location</h2>
+                      <h2 className="font-semibold text-[#F5F5F7]">{t('settings.publicLocation')}</h2>
                       <InfoTip>
-                        Optional. Shown on the Public Teams map at country level only — never a precise address or coordinates. Leave blank to stay under &quot;Unknown location&quot;.
+                        {t('settings.publicLocationTip')}
                       </InfoTip>
                     </div>
                     <div className="mt-4 grid gap-3 sm:grid-cols-2">
                       <Input
                         value={country}
                         onChange={(event) => setCountry(event.target.value)}
-                        placeholder="Country (e.g. Spain)"
-                        aria-label="Public country"
+                        placeholder={t('settings.countryPlaceholder')}
+                        aria-label={t('settings.countryAria')}
                         maxLength={80}
                       />
                       <Input
                         value={city}
                         onChange={(event) => setCity(event.target.value)}
-                        placeholder="City (optional)"
-                        aria-label="Public city"
+                        placeholder={t('settings.cityPlaceholder')}
+                        aria-label={t('settings.cityAria')}
                         maxLength={120}
                       />
                     </div>
                   </div>
                   <Button variant="primary" size="sm" onClick={saveLocation} loading={savingLocation} disabled={!locationDirty} className="shrink-0">
-                    Save location
+                    {t('settings.saveLocation')}
                   </Button>
                 </div>
               </div>
@@ -528,9 +537,9 @@ export function SettingsPage() {
                     <div>
                       <div className="flex items-center justify-center gap-3 sm:justify-start">
                         <ShieldCheck className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
-                        <h2 className="font-semibold text-[#F5F5F7]">Public proof</h2>
+                        <h2 className="font-semibold text-[#F5F5F7]">{t('settings.publicProof')}</h2>
                         <InfoTip>
-                          Enables the public proof page. Each split rule still needs its own Public toggle before it appears there.
+                          {t('settings.publicProofTip')}
                         </InfoTip>
                       </div>
                       <p className="mt-3 font-mono text-xs text-[#94A3B8]">/public/{publicSlug}</p>
@@ -555,7 +564,7 @@ export function SettingsPage() {
                       aria-pressed={publicPageOn}
                       disabled={savingPublicProof}
                     >
-                      {publicPageOn ? 'On' : 'Off'}
+                      {publicPageOn ? t('common.on') : t('common.off')}
                     </button>
                   </div>
 
@@ -578,11 +587,11 @@ export function SettingsPage() {
                           <Globe2 className="h-4.5 w-4.5" strokeWidth={1.8} />
                         </div>
                         <div className="text-center sm:text-left">
-                          <p className="text-sm font-semibold text-[#F5F5F7]">Public rules</p>
+                          <p className="text-sm font-semibold text-[#F5F5F7]">{t('settings.publicRules')}</p>
                           <p className="mt-1 font-mono text-xs text-[#94A3B8]">
                             {publicPageOn
-                              ? `${publicRules.length} public · ${splitRules.length} total`
-                              : `Off · ${publicRules.length} saved public · ${splitRules.length} total`}
+                              ? t('settings.publicRulesCounts', { public: publicRules.length, total: splitRules.length })
+                              : t('settings.publicRulesCountsOff', { public: publicRules.length, total: splitRules.length })}
                           </p>
                         </div>
                       </div>
@@ -598,7 +607,7 @@ export function SettingsPage() {
                               : 'text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F5F5F7]'
                           )}
                         >
-                          Public only
+                          {t('settings.publicOnly')}
                         </button>
                         <button
                           type="button"
@@ -610,25 +619,25 @@ export function SettingsPage() {
                               : 'text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F5F5F7]'
                           )}
                         >
-                          All rules
+                          {t('settings.allRules')}
                         </button>
                       </div>
                     </div>
 
                     {!publicPageOn && (
                       <div className="public-rules-paused mt-4 rounded-2xl border border-orange-300/20 bg-orange-400/[0.08] px-4 py-3 text-sm font-medium text-orange-100">
-                        Public proof is Off. Saved public-rule choices are paused and hidden from visitors.
+                        {t('settings.publicProofPaused')}
                       </div>
                     )}
 
                     <div className="public-rules-list mt-4 overflow-hidden rounded-2xl border border-white/[0.10] bg-[#11131F]/52">
                       {splitRulesLoading && (
-                        <p className="p-4 text-sm text-[#94A3B8]">Loading rules...</p>
+                        <p className="p-4 text-sm text-[#94A3B8]">{t('settings.loadingRules')}</p>
                       )}
 
                       {!splitRulesLoading && displayedPublicRules.length === 0 && (
                         <p className="p-4 text-sm text-[#94A3B8]">
-                          {showPublicRulesOnly ? 'No public rules yet.' : 'No split rules yet.'}
+                          {showPublicRulesOnly ? t('settings.noPublicRules') : t('settings.noSplitRules')}
                         </p>
                       )}
 
@@ -652,21 +661,21 @@ export function SettingsPage() {
                               <div className="min-w-0">
                                 <div className="flex flex-wrap items-center gap-2">
                                   <p className="truncate text-sm font-semibold text-[#F5F5F7]">{rule.name}</p>
-                                  <Badge variant={rule.active ? 'success' : 'default'}>{rule.active ? 'Active' : 'Inactive'}</Badge>
+                                  <Badge variant={rule.active ? 'success' : 'default'}>{rule.active ? t('splits.active') : t('splits.inactive')}</Badge>
                                 </div>
                                 <p className="mt-2 font-mono text-xs text-[#94A3B8]">
-                                  v{rule.version} · {wallets} wallets · {total}% allocated
+                                  {t('settings.ruleMeta', { version: rule.version, count: wallets, total })}
                                 </p>
                               </div>
 
                               <div className="flex items-center gap-2 lg:justify-end">
-                                <span className="text-xs font-semibold text-[#94A3B8]">Public</span>
+                                <span className="text-xs font-semibold text-[#94A3B8]">{t('settings.publicLabel')}</span>
                                 <button
                                   type="button"
                                   onClick={() => void toggleRulePublic(rule)}
                                   disabled={toggleDisabled}
                                   aria-pressed={publicPageOn && rule.public_enabled}
-                                  title={!publicPageOn ? 'Turn Public proof on before publishing rules' : undefined}
+                                  title={!publicPageOn ? t('settings.turnOnFirst') : undefined}
                                   className={cn(
                                     'public-rule-toggle relative h-8 w-16 rounded-full border transition focus:outline-none focus:ring-2 focus:ring-[#FF2D78]/30',
                                     toggleDisabled && 'cursor-not-allowed',
@@ -684,7 +693,7 @@ export function SettingsPage() {
                                     )}
                                   />
                                   <span className="sr-only">
-                                    {rule.public_enabled ? 'Hide rule from public page' : 'Show rule on public page'}
+                                    {rule.public_enabled ? t('settings.hideRuleSr') : t('settings.showRuleSr')}
                                   </span>
                                 </button>
                               </div>
@@ -697,7 +706,9 @@ export function SettingsPage() {
                                     ? 'text-orange-200'
                                     : 'text-[#94A3B8]'
                               )}>
-                                {publicPageOn ? (rule.public_enabled ? 'ON' : 'OFF') : (rule.public_enabled ? 'PAUSED' : 'OFF')}
+                                {publicPageOn
+                                  ? (rule.public_enabled ? t('settings.ruleOn') : t('settings.ruleOff'))
+                                  : (rule.public_enabled ? t('settings.rulePaused') : t('settings.ruleOff'))}
                               </p>
                             </div>
                           );
@@ -720,15 +731,15 @@ export function SettingsPage() {
                     <div>
                       <div className="flex items-center justify-center gap-3 sm:justify-start">
                         <Coins className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
-                        <h2 className="font-semibold text-[#F5F5F7]">Show amounts on the public page</h2>
+                        <h2 className="font-semibold text-[#F5F5F7]">{t('settings.showAmounts')}</h2>
                         <InfoTip>
-                          Off by default. When off, visitors see split percentages and activity, never sat amounts or your total sats moved.
+                          {t('settings.showAmountsTip')}
                         </InfoTip>
                       </div>
                       <p className="mt-3 max-w-md text-sm leading-6 text-[#94A3B8]">
                         {showAmountsOn
-                          ? 'On — every public visitor can see the sat amount of each payment and your total sats moved.'
-                          : 'Off — visitors see split percentages and activity, never sat amounts or totals.'}
+                          ? t('settings.amountsOnDescription')
+                          : t('settings.amountsOffDescription')}
                       </p>
                     </div>
 
@@ -752,17 +763,17 @@ export function SettingsPage() {
                             : 'border-white/[0.10] bg-white/[0.06] text-[#94A3B8]'
                       )}
                       aria-pressed={publicPageOn && showAmountsOn}
-                      aria-label="Show amounts on the public page"
+                      aria-label={t('settings.showAmounts')}
                       disabled={!publicPageOn || savingShowAmounts}
-                      title={!publicPageOn ? 'Turn Public proof on first' : undefined}
+                      title={!publicPageOn ? t('settings.turnOnProofFirst') : undefined}
                     >
-                      {showAmountsOn ? 'On' : 'Off'}
+                      {showAmountsOn ? t('common.on') : t('common.off')}
                     </button>
                   </div>
 
                   {!publicPageOn && (
                     <div className="public-amounts-paused mt-4 rounded-2xl border border-orange-300/20 bg-orange-400/[0.08] px-4 py-3 text-sm font-medium text-orange-100">
-                      Public proof is Off. Amount visibility is paused — turn Public proof on to change it.
+                      {t('settings.amountsPaused')}
                     </div>
                   )}
                 </div>
@@ -773,9 +784,9 @@ export function SettingsPage() {
                   <div className="w-full sm:max-w-md">
                     <div className="flex items-center justify-center gap-3 sm:justify-start">
                       <KeyRound className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
-                      <h2 className="font-semibold text-[#F5F5F7]">Nostr signing identity</h2>
+                      <h2 className="font-semibold text-[#F5F5F7]">{t('settings.nostrIdentity')}</h2>
                       <InfoTip>
-                        The team’s PUBLIC key (npub or hex) that signed Split Proofs verify against. The private signing key stays on your server as ORCHESTRATOR_NOSTR_SECKEY — OpenSplit never stores it. Never paste an nsec here.
+                        {t('settings.nostrTip')}
                       </InfoTip>
                     </div>
                     <Input
@@ -783,17 +794,17 @@ export function SettingsPage() {
                       value={nostrKeyInput}
                       onChange={(event) => setNostrKeyInput(event.target.value)}
                       placeholder="npub1…"
-                      aria-label="Team Nostr public key"
+                      aria-label={t('settings.nostrKeyAria')}
                       maxLength={128}
                       spellCheck={false}
                     />
                     <p className="mt-2 break-all font-mono text-xs text-[#94A3B8]">
                       {savedNostrNpub ? (
                         <>
-                          Saved: <span className="text-[#F5F5F7]">{savedNostrNpub}</span>
+                          {t('settings.savedLabel')} <span className="text-[#F5F5F7]">{savedNostrNpub}</span>
                         </>
                       ) : (
-                        'No key saved — the Sign proof action stays hidden on receipts.'
+                        t('settings.noKeySaved')
                       )}
                     </p>
                   </div>
@@ -805,7 +816,7 @@ export function SettingsPage() {
                     disabled={!nostrKeyDirty}
                     className="shrink-0"
                   >
-                    Save key
+                    {t('settings.saveKey')}
                   </Button>
                 </div>
               </div>
@@ -822,9 +833,9 @@ export function SettingsPage() {
                 <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
                   <div>
                     <div className="flex items-center justify-center gap-3 sm:justify-start">
-                      <h2 className="font-semibold text-[#F5F5F7]">Appearance</h2>
+                      <h2 className="font-semibold text-[#F5F5F7]">{t('settings.appearance')}</h2>
                       <InfoTip>
-                        Sets the interface theme for this browser only. Payment records, Split Proofs, and public data stay unchanged.
+                        {t('settings.appearanceTip')}
                       </InfoTip>
                     </div>
                   </div>
@@ -844,9 +855,47 @@ export function SettingsPage() {
                               ? 'bg-[#FF2D78] text-[#0A0B12]'
                               : 'text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F5F5F7]'
                           )}
-                          title={option.description}
+                          title={t(option.descriptionKey)}
                         >
                           <option.icon className="h-4 w-4" strokeWidth={1.8} />
+                          {t(option.labelKey)}
+                          {selected && <Check className="absolute right-2 h-3.5 w-3.5" strokeWidth={2} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              <div className="border-t border-white/[0.07] p-6 sm:p-8">
+                <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-center sm:justify-between sm:text-left">
+                  <div>
+                    <div className="flex items-center justify-center gap-3 sm:justify-start">
+                      <Languages className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
+                      <h2 className="font-semibold text-[#F5F5F7]">{t('settings.language.title')}</h2>
+                      <InfoTip>
+                        {t('settings.language.tip')}
+                      </InfoTip>
+                    </div>
+                  </div>
+
+                  <div className="grid w-full max-w-xs grid-cols-2 gap-2 rounded-lg border border-white/[0.08] bg-white/[0.035] p-1.5">
+                    {languageOptions.map((option) => {
+                      const selected = (i18n.resolvedLanguage ?? i18n.language) === option.value;
+
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => void i18n.changeLanguage(option.value)}
+                          className={cn(
+                            'relative inline-flex min-h-10 items-center justify-center gap-2 rounded-md text-sm font-semibold transition',
+                            selected
+                              ? 'bg-[#FF2D78] text-[#0A0B12]'
+                              : 'text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F5F5F7]'
+                          )}
+                          aria-pressed={selected}
+                        >
                           {option.label}
                           {selected && <Check className="absolute right-2 h-3.5 w-3.5" strokeWidth={2} />}
                         </button>
@@ -863,10 +912,10 @@ export function SettingsPage() {
       <ConfirmDialog
         open={confirmPublicProofOpen}
         logoSrc="/brand/OpenSplit-navbar.svg"
-        title="Enable public proof?"
-        description="Only the rules you publish will be visible. Private wallet data stays hidden."
-        cancelLabel="Cancel"
-        confirmLabel="Enable"
+        title={t('settings.enableProofTitle')}
+        description={t('settings.enableProofDescription')}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('settings.enable')}
         celebrateOnConfirm
         loading={savingPublicProof}
         confirmDisabled={savingPublicProof}
@@ -877,20 +926,20 @@ export function SettingsPage() {
       >
         <div className="public-proof-confirm-summary mx-auto flex max-w-[18rem] items-center justify-between gap-3 rounded-2xl border border-white/[0.12] bg-white/[0.045] px-4 py-3 text-left">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#FF2D78]">Visible rules</p>
-            <p className="mt-0.5 text-sm font-semibold text-white">{publicRules.length} selected</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[#FF2D78]">{t('settings.visibleRules')}</p>
+            <p className="mt-0.5 text-sm font-semibold text-white">{t('settings.selectedCount', { count: publicRules.length })}</p>
           </div>
-          <span className="rounded-full bg-[#FF2D78]/12 px-3 py-1 text-xs font-semibold text-[#FF2D78]">Public</span>
+          <span className="rounded-full bg-[#FF2D78]/12 px-3 py-1 text-xs font-semibold text-[#FF2D78]">{t('settings.publicLabel')}</span>
         </div>
       </ConfirmDialog>
 
       <ConfirmDialog
         open={confirmShowAmountsOpen}
         logoSrc="/brand/OpenSplit-navbar.svg"
-        title="Show amounts publicly?"
-        description="This makes every public visitor able to see the sat amount of each payment and your total sats moved. Continue?"
-        cancelLabel="Cancel"
-        confirmLabel="Show amounts"
+        title={t('settings.showAmountsTitle')}
+        description={t('settings.showAmountsConfirmDescription')}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('settings.showAmountsConfirm')}
         loading={savingShowAmounts}
         confirmDisabled={savingShowAmounts}
         onClose={() => setConfirmShowAmountsOpen(false)}
@@ -907,7 +956,7 @@ export function SettingsPage() {
         }}
       >
         <LogOut className="h-4 w-4" strokeWidth={1.8} />
-        Sign out
+        {t('settings.signOut')}
       </Button>
     </div>
   );

@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenantStatus } from '@/hooks/useTenantStatus';
 import { btcpayPayoutProcessorsUrl, btcpayPayoutsUrl } from '@/lib/payments';
@@ -29,6 +30,8 @@ const TONE_DOT: Record<StatusSummaryTone, string> = {
  *  links to the full detail strip in Settings › Connection. Renders nothing
  *  until status has loaded, matching the detail strip's no-data behavior. */
 export function StatusSummaryPill() {
+  // Subscribes to language changes so the i18n-backed summary recomputes.
+  const { t } = useTranslation();
   const { tenant } = useAuth();
   const { data: status } = useTenantStatus();
 
@@ -50,7 +53,7 @@ export function StatusSummaryPill() {
   return (
     <Link
       to="/settings#connection"
-      aria-label={`Pipeline status: ${summary.label}. Open connection settings.`}
+      aria-label={t('status.pillAria', { label: summary.label })}
       className={cn(
         'inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors',
         TONE_SHELL[summary.tone]

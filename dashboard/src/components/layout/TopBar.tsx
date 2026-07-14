@@ -1,5 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { Globe2, Settings, Users } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 
 // mempool.space-style nav item: the active state is a full-height rectangular
@@ -22,12 +23,13 @@ const mobileNavItemClass = ({ isActive }: { isActive: boolean }) =>
   );
 
 const navItems = [
-  { to: '/team', label: 'Team', icon: Users },
-  { to: '/public', label: 'Public teams', icon: Globe2 },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/team', labelKey: 'nav.team', icon: Users },
+  { to: '/public', labelKey: 'nav.publicTeams', icon: Globe2 },
+  { to: '/settings', labelKey: 'nav.settings', icon: Settings },
 ];
 
 export function TopBar() {
+  const { t } = useTranslation();
   return (
     <>
       <header className="fixed inset-x-0 top-0 z-[60] border-b border-white/[0.06] bg-[#0A0B12]">
@@ -44,7 +46,7 @@ export function TopBar() {
             {navItems.map((item) => (
               <NavLink key={item.to} to={item.to} className={navItemClass}>
                 <item.icon className="h-4 w-4" strokeWidth={1.8} />
-                {item.label}
+                {t(item.labelKey)}
               </NavLink>
             ))}
           </nav>
@@ -57,7 +59,7 @@ export function TopBar() {
           {navItems.map((item) => (
             <NavLink key={item.to} to={item.to} className={mobileNavItemClass}>
               <item.icon className="h-5 w-5" strokeWidth={1.9} />
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
             </NavLink>
           ))}
         </div>

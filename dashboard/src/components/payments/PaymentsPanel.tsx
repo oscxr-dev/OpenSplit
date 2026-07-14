@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { ReceiptText } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { useInvoices, useRetryPaymentSplit } from '@/hooks/useInvoices';
 import { SplitProofReceipt } from '@/components/payments/SplitProofReceipt';
 import { Card, CardContent } from '@/components/ui/Card';
@@ -9,7 +10,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { ErrorState } from '@/components/shared/ErrorState';
-import { cn, formatDateShort, formatFiat, formatSats, payoutStatusLabel } from '@/lib/utils';
+import { cn, formatDateShort, formatFiat, formatSats, payoutStatusLabel, payoutStatusVariant } from '@/lib/utils';
 import {
   completedSummary,
   isDemoHistoryPayment,
@@ -30,6 +31,7 @@ const FETCH_LIMIT = 100;
  * live transactions with a 5 / 10 / 15 / 21 count selector (default 5).
  */
 export function PaymentsPanel() {
+  const { t } = useTranslation();
   const [count, setCount] = useState<number>(DEFAULT_COUNT);
   const [selectedPayment, setSelectedPayment] = useState<Invoice | null>(null);
   const retrySplit = useRetryPaymentSplit();
@@ -45,7 +47,10 @@ export function PaymentsPanel() {
   async function handleRetry(split: PaymentSplit) {
     if (!selectedPayment) return;
     const confirmed = window.confirm(
-      `Retry ${formatSats(split.amount_sats)} payout to ${split.label || 'this partner'}?`
+      t('payments.retryConfirm', {
+        amount: formatSats(split.amount_sats),
+        label: split.label || t('payments.thisPartner'),
+      })
     );
     if (!confirmed) return;
 
@@ -55,9 +60,9 @@ export function PaymentsPanel() {
         ...selectedPayment,
         splits: selectedPayment.splits.map((item) => (item.id === split.id ? updated : item)),
       });
-      toast.success('Payout retry started.');
+      toast.success(t('payments.retryStarted'));
     } catch {
-      toast.error('Could not retry payout.');
+      toast.error(t('payments.retryFailed'));
     }
   }
 
@@ -70,8 +75,8 @@ export function PaymentsPanel() {
               <ReceiptText className="h-4 w-4" strokeWidth={1.8} />
             </div>
             <div>
-              <h2 className="font-semibold text-[#F5F5F7]">Recent payments</h2>
-              <p className="mt-1 text-sm text-[#94A3B8]">Latest transactions and their split proof status</p>
+              <h2 className="font-semibold text-[#F5F5F7]">{t('payments.recentPayments')}</h2>
+              <p className="mt-1 text-sm text-[#94A3B8]">{t('payments.recentSubtitle')}</p>
             </div>
           </div>
 
@@ -79,7 +84,7 @@ export function PaymentsPanel() {
           <div
             className="flex items-center gap-0.5 rounded-lg border border-white/[0.08] bg-white/[0.03] p-0.5"
             role="group"
-            aria-label="Number of transactions to show"
+            aria-label={t('payments.countAria')}
           >
             {COUNT_OPTIONS.map((option) => (
               <button
@@ -108,14 +113,14 @@ export function PaymentsPanel() {
           </div>
         ) : isError ? (
           <div className="p-5">
-            <ErrorState message="Could not load payments" onRetry={() => refetch()} />
+            <ErrorState message={t('payments.loadError')} onRetry={() => refetch()} />
           </div>
         ) : visiblePayments.length === 0 ? (
           <EmptyState
             className="min-h-0 rounded-none border-0 bg-transparent py-12"
             icon={<ReceiptText className="h-7 w-7" />}
-            message="No payments yet"
-            description="Paid invoices will appear here as soon as your first split settles."
+            message={t('payments.emptyTitle')}
+            description={t('payments.emptyDescription')}
           />
         ) : (
           <div className="divide-y divide-white/[0.06]">
@@ -131,7 +136,7 @@ export function PaymentsPanel() {
                   className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-white/[0.025]"
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-medium text-[#F5F5F7]">{payment.memo || 'OpenSplit invoice'}</p>
+                    <p className="truncate font-medium text-[#F5F5F7]">{payment.memo || t('payments.defaultMemo')}</p>
                     <p className="mt-1 text-xs text-[#94A3B8]">
                       {formatDateShort(payment.paid_at || payment.created_at)} · {completedSummary(payment)}
                     </p>
@@ -142,9 +147,9 @@ export function PaymentsPanel() {
                       {fiat && <p className="mt-0.5 font-mono text-xs text-[#94A3B8]">{fiat}</p>}
                     </div>
                     {waitingInBtcpay ? (
-                      <Badge variant="warning">Waiting in BTCPay</Badge>
+                      <Badge variant="warning">{t('payments.waitingInBtcpay')}</Badge>
                     ) : (
-                      <Badge>{payoutStatusLabel(status)}</Badge>
+                      <Badge variant={payoutStatusVariant(status)}>{payoutStatusLabel(status)}</Badge>
                     )}
                   </div>
                 </button>
@@ -154,7 +159,7 @@ export function PaymentsPanel() {
         )}
       </CardContent>
 
-      <Dialog open={!!selectedPayment} onClose={() => setSelectedPayment(null)} title="Split Proof" className="max-w-3xl">
+      <Dialog open={!!selectedPayment} onClose={() => setSelectedPayment(null)} title={t('proof.title')} className="max-w-3xl">
         {selectedPayment && (
           <SplitProofReceipt payment={selectedPayment} onRetrySplit={handleRetry} retrying={retrySplit.isPending} />
         )}

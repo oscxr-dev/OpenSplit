@@ -1,14 +1,11 @@
 import type { Invoice } from '@/types/api';
+import i18n from '@/i18n';
 import { payoutStatusLabel } from '@/lib/utils';
 import { toBrowserUrl } from '@/lib/browserUrl';
 
 /** Raw BTCPay payout states meaning "BTCPay is holding this payout" — it needs
  *  a manual send or a Lightning payout processor before it can settle. */
 const WAITING_BTCPAY_STATES = ['AwaitingApproval', 'AwaitingPayment'];
-
-/** One-line operator hint shown next to a "Waiting in BTCPay" payout. */
-export const WAITING_IN_BTCPAY_HINT =
-  'Send it manually in BTCPay or enable a Lightning payout processor';
 
 /** True when a split is mapped to in_progress but BTCPay's raw state shows it
  *  is parked awaiting approval/payment — i.e. stuck until the operator acts. */
@@ -29,7 +26,7 @@ export function splitStatusLabel(split: {
   status: string;
   btcpay_payout_state?: string | null;
 }): string {
-  return isWaitingInBtcpay(split) ? 'Waiting in BTCPay' : payoutStatusLabel(split.status);
+  return isWaitingInBtcpay(split) ? i18n.t('payments.waitingInBtcpay') : payoutStatusLabel(split.status);
 }
 
 /** Browser-openable link to a store's BTCPay payouts screen (host.docker.internal
@@ -85,7 +82,9 @@ export function paymentIsWaitingInBtcpay(payment: Invoice): boolean {
 
 export function completedSummary(payment: Invoice): string {
   const completed = payment.splits.filter((split) => split.status === 'completed').length;
-  return payment.splits.length ? `${completed}/${payment.splits.length} shares settled` : 'No split recorded';
+  return payment.splits.length
+    ? i18n.t('payments.sharesSettled', { completed, count: payment.splits.length })
+    : i18n.t('payments.noSplitRecorded');
 }
 
 export function splitTotal(payment: Invoice): number {

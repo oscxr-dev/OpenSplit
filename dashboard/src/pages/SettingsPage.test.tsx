@@ -12,6 +12,24 @@ beforeAll(() => {
   };
 });
 
+// Node's experimental `localStorage` global shadows jsdom's with `undefined`;
+// shim it before the i18n module initializes so the language switcher can
+// persist its choice like in a real browser.
+vi.hoisted(() => {
+  const backing = new Map<string, string>();
+  const shim: Storage = {
+    getItem: (key) => (backing.has(key) ? backing.get(key)! : null),
+    setItem: (key, value) => void backing.set(key, String(value)),
+    removeItem: (key) => void backing.delete(key),
+    clear: () => backing.clear(),
+    key: (index) => [...backing.keys()][index] ?? null,
+    get length() {
+      return backing.size;
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', { value: shim, configurable: true });
+});
+
 const TENANT_ID = '4f0c2f9e-9d3a-4b7c-8e21-6a5f0d1c2b3a';
 
 // Hoisted, mutable test state so individual tests can vary the tenant flags
@@ -70,6 +88,7 @@ vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/components/team/StatusStrip', () => ({ StatusStrip: () => null }));
 
 import { SettingsPage } from './SettingsPage';
+import i18n, { LANGUAGE_STORAGE_KEY } from '@/i18n';
 
 beforeEach(() => {
   h.tenantOverrides = {};
@@ -265,6 +284,30 @@ describe('SettingsPage tenant UUID privacy', () => {
       }
     }
     expect(leaks).toEqual([]);
+  });
+});
+
+describe('SettingsPage language switcher', () => {
+  // The i18n singleton is shared across this file — always restore English so
+  // a failure here cannot cascade into the other describes.
+  afterEach(async () => {
+    await i18n.changeLanguage('en');
+    window.localStorage.removeItem(LANGUAGE_STORAGE_KEY);
+  });
+
+  it('lives on the Appearance tab, translates the UI to Spanish, and persists', async () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Appearance' }));
+    expect(screen.getByRole('button', { name: /English/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Español/ }));
+
+    // The whole settings UI re-renders in Spanish…
+    expect(await screen.findByRole('tab', { name: 'Conexión' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Apariencia' })).toBeTruthy();
+    // …and the choice is cached for the next visit.
+    expect(window.localStorage.getItem(LANGUAGE_STORAGE_KEY)).toBe('es');
   });
 });
 

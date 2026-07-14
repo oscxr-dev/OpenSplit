@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import axios from 'axios';
 import { LockKeyhole } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { loginSchema, type LoginFormData } from '@/schemas/auth';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -12,6 +13,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { isAuthenticated } from '@/lib/auth';
 
 export function LoginPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { login } = useAuth();
 
@@ -36,11 +38,11 @@ export function LoginPage() {
       navigate('/', { replace: true });
     } catch (error) {
       if (axios.isAxiosError(error) && error.response?.status === 401) {
-        toast.error('Invalid credentials. Check your email and password.');
+        toast.error(t('auth.invalidCredentials'));
         return;
       }
 
-      toast.error('Could not connect to OpenSplit. Check that the API is running.');
+      toast.error(t('auth.connectionError'));
     }
   }
 
@@ -56,26 +58,26 @@ export function LoginPage() {
               alt="OpenSplit"
               className="opensplit-wordmark h-20 w-full max-w-[320px] object-contain"
             />
-            <p className="text-sm text-white/40">Your node, your payments, your rules.</p>
+            <p className="text-sm text-white/40">{t('auth.tagline')}</p>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
             <Input
-              aria-label="Email"
+              aria-label={t('auth.email')}
               type="email"
               placeholder="admin@opensplit.com"
               autoComplete="email"
-              error={errors.email?.message}
+              error={errors.email?.message ? t(errors.email.message) : undefined}
               className="border-transparent bg-transparent px-0 text-base font-medium shadow-none placeholder:text-white/55 hover:border-transparent hover:bg-transparent focus:border-transparent focus:bg-transparent focus:ring-0"
               {...register('email')}
             />
 
             <Input
-              label="Password"
+              label={t('auth.password')}
               type="password"
               placeholder="••••••••"
               autoComplete="current-password"
-              error={errors.password?.message}
+              error={errors.password?.message ? t(errors.password.message) : undefined}
               {...register('password')}
             />
 
@@ -86,12 +88,12 @@ export function LoginPage() {
               size="lg"
             >
               <LockKeyhole className="h-4 w-4" />
-              Unlock
+              {t('auth.unlock')}
             </Button>
           </form>
         </div>
         <p className="mt-5 text-center text-[11px] tracking-wide text-white/25">
-          Protected local connection
+          {t('auth.protectedConnection')}
         </p>
       </div>
     </div>

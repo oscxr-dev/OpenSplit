@@ -14,8 +14,10 @@ const hasUsefulWalletId = (value?: string) => {
   return text.length >= 16 && /[a-z]/i.test(text);
 };
 
+// Validation messages are i18n KEYS — the form translates them at render time
+// (see SplitRuleForm), so the schema itself stays static and language-agnostic.
 export const targetSchema = z.object({
-  label: z.string().trim().min(1, 'Label is required'),
+  label: z.string().trim().min(1, 'errors.validation.labelRequired'),
   ln_address: z.string().trim().optional(),
   lnbits_wallet_id: z.string().trim().optional(),
   // True when the backend reports a dynamic LND receiver for this label; such
@@ -23,8 +25,8 @@ export const targetSchema = z.object({
   has_lnd_receiver: z.boolean().optional(),
   percentage: z
     .number()
-    .min(0.01, 'Percentage must be greater than 0')
-    .max(100, 'Percentage cannot exceed 100'),
+    .min(0.01, 'errors.validation.percentageMin')
+    .max(100, 'errors.validation.percentageMax'),
   order: z.number().int().min(0),
 }).superRefine((target, ctx) => {
   if (
@@ -35,16 +37,16 @@ export const targetSchema = z.object({
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
       path: ['ln_address'],
-      message: 'Add a valid Lightning address, for example name@wallet.com',
+      message: 'errors.validation.lnAddressInvalid',
     });
   }
 });
 
 export const splitRuleSchema = z.object({
-  name: z.string().trim().min(1, 'Rule name is required').max(100),
+  name: z.string().trim().min(1, 'errors.validation.ruleNameRequired').max(100),
   targets: z
     .array(targetSchema)
-    .min(1, 'At least one destination is required')
+    .min(1, 'errors.validation.destinationRequired')
     .refine(
       (targets) => {
         // Partial split rules are allowed: the total may be anywhere in (0, 100].
@@ -52,7 +54,7 @@ export const splitRuleSchema = z.object({
         const sum = targets.reduce((acc, t) => acc + t.percentage, 0);
         return sum > 0 && sum <= 100.001;
       },
-      { message: 'Percentages cannot exceed 100%' }
+      { message: 'errors.validation.percentagesExceed' }
     ),
 });
 

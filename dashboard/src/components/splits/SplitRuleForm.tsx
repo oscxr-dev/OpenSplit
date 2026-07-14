@@ -2,15 +2,12 @@ import { useState, useCallback } from 'react';
 import { AlertTriangle, Plus, Trash2, GripVertical, Zap } from 'lucide-react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useTranslation } from 'react-i18next';
 import { splitRuleSchema, type SplitRuleFormData } from '@/schemas/split';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
-import {
-  destinationBadge,
-  looksLikeEmailProvider,
-  EMAIL_ADDRESS_CAUTION,
-} from '@/lib/destinations';
+import { destinationBadge, looksLikeEmailProvider } from '@/lib/destinations';
 import { cn } from '@/lib/utils';
 
 const TARGET_COLORS = [
@@ -31,6 +28,7 @@ interface SplitRuleFormProps {
 }
 
 export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFormProps) {
+  const { t } = useTranslation();
   const [submitting, setSubmitting] = useState(false);
 
   const {
@@ -105,22 +103,22 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5">
       <Input
-        label="Rule name"
-        placeholder="Example: Weekend split"
-        error={errors.name?.message}
+        label={t('splits.form.ruleName')}
+        placeholder={t('splits.form.ruleNamePlaceholder')}
+        error={errors.name?.message ? t(errors.name.message) : undefined}
         {...register('name')}
       />
 
       <div className="space-y-2.5">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-white/90">Destinations</h4>
+          <h4 className="text-sm font-semibold text-white/90">{t('splits.form.destinations')}</h4>
           <div className="flex items-center gap-2">
             <Button type="button" variant="ghost" size="sm" onClick={splitEvenly}>
-              Split evenly
+              {t('splits.form.splitEvenly')}
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={addTarget}>
               <Plus className="w-4 h-4" />
-              Add
+              {t('splits.form.add')}
             </Button>
           </div>
         </div>
@@ -147,7 +145,7 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
                 )}
               />
               <span className="text-xs font-semibold text-white/70">
-                Destination {index + 1}
+                {t('splits.form.destinationN', { number: index + 1 })}
               </span>
               <Badge variant={badge.variant} className="ml-1">{badge.label}</Badge>
               {fields.length > 1 && (
@@ -163,37 +161,37 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
 
             <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_140px]">
               <Input
-                label="Label"
-                placeholder="Example: Partner 1"
-                error={errors.targets?.[index]?.label?.message}
+                label={t('splits.form.label')}
+                placeholder={t('splits.form.labelPlaceholder')}
+                error={errors.targets?.[index]?.label?.message ? t(errors.targets[index]!.label!.message!) : undefined}
                 {...register(`targets.${index}.label`)}
               />
               {targets?.[index]?.has_lnd_receiver ? (
                 <div className="w-full">
                   <span className="mb-1.5 block text-xs font-semibold text-white/70">
-                    Lightning address
+                    {t('splits.form.lightningAddress')}
                   </span>
                   <div className="flex items-center gap-2 rounded-xl border border-emerald-300/15 bg-emerald-400/10 px-4 py-2.5 text-sm text-emerald-300">
                     <Zap className="h-4 w-4 flex-shrink-0" strokeWidth={1.8} />
-                    LND receiver configured
+                    {t('splits.form.lndReceiverConfigured')}
                   </div>
                 </div>
               ) : (
                 <Input
-                  label="Lightning address"
+                  label={t('splits.form.lightningAddress')}
                   placeholder="name@wallet.com"
-                  error={errors.targets?.[index]?.ln_address?.message}
+                  error={errors.targets?.[index]?.ln_address?.message ? t(errors.targets[index]!.ln_address!.message!) : undefined}
                   {...register(`targets.${index}.ln_address`)}
                 />
               )}
               <Input
-                label="Percentage (%)"
+                label={t('splits.form.percentage')}
                 type="number"
                 step="0.1"
                 min="0"
                 max="100"
                 placeholder="50"
-                error={errors.targets?.[index]?.percentage?.message}
+                error={errors.targets?.[index]?.percentage?.message ? t(errors.targets[index]!.percentage!.message!) : undefined}
                 {...register(`targets.${index}.percentage`, { valueAsNumber: true })}
               />
             </div>
@@ -201,7 +199,7 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
             {showEmailCaution && (
               <p className="flex items-center gap-1.5 text-xs text-amber-300">
                 <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" strokeWidth={1.8} />
-                {EMAIL_ADDRESS_CAUTION}
+                {t('splits.form.emailCaution')}
               </p>
             )}
           </div>
@@ -221,26 +219,26 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
         )}
       >
         <div className="flex items-center justify-between text-sm font-medium">
-          <span>{overAllocated ? 'Over-allocated' : `${fmtPct(totalPercentage)}% allocated`}</span>
+          <span>{overAllocated ? t('splits.form.overAllocated') : t('splits.form.allocated', { pct: fmtPct(totalPercentage) })}</span>
           <span className="tabular-nums font-bold">{totalPercentage.toFixed(1)}%</span>
         </div>
         {overAllocated ? (
-          <p className="mt-1 text-xs">Totals can&apos;t exceed 100%. Reduce by {fmtPct(totalPercentage - 100)}%.</p>
+          <p className="mt-1 text-xs">{t('splits.form.reduceBy', { pct: fmtPct(totalPercentage - 100) })}</p>
         ) : totalPercentage > 0 && !fullyAllocated ? (
-          <p className="mt-1 text-xs text-white/55">{fmtPct(remainder)}% stays in store</p>
+          <p className="mt-1 text-xs text-white/55">{t('splits.form.staysInStore', { pct: fmtPct(remainder) })}</p>
         ) : null}
       </div>
 
       {errors.targets?.root?.message && (
-        <p className="text-sm text-red-300">{errors.targets.root.message}</p>
+        <p className="text-sm text-red-300">{t(errors.targets.root.message)}</p>
       )}
       {typeof errors.targets?.message === 'string' && (
-        <p className="text-sm text-red-300">{errors.targets.message}</p>
+        <p className="text-sm text-red-300">{t(errors.targets.message)}</p>
       )}
 
       <div className="flex gap-3 pt-3">
         <Button type="button" variant="outline" onClick={onCancel} className="flex-1">
-          Cancel
+          {t('common.cancel')}
         </Button>
         <Button
           type="submit"
@@ -248,7 +246,7 @@ export function SplitRuleForm({ defaultValues, onSubmit, onCancel }: SplitRuleFo
           disabled={!isValidTotal}
           className="flex-1 disabled:!opacity-100 disabled:!border-white/10 disabled:!bg-white/[0.09] disabled:!text-white/45"
         >
-          Save
+          {t('common.save')}
         </Button>
       </div>
     </form>

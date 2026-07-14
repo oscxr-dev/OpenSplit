@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import axios from 'axios';
 import { Pencil, Plus, PowerOff, Search, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { useActivateSplit, useCreateSplit, useDeactivateSplit, useDeleteSplit, useUpdateSplit } from '@/hooks/useSplits';
 import { SplitBar } from '@/components/splits/SplitBar';
 import { SplitRuleForm } from '@/components/splits/SplitRuleForm';
@@ -25,10 +26,10 @@ interface SplitRulesSectionProps {
   startOpen?: boolean;
 }
 
-const LIBRARY_FILTERS: Array<{ value: RuleLibraryFilter; label: string }> = [
-  { value: 'all', label: 'All' },
-  { value: 'active', label: 'Active' },
-  { value: 'inactive', label: 'Inactive' },
+const LIBRARY_FILTERS: Array<{ value: RuleLibraryFilter; labelKey: string }> = [
+  { value: 'all', labelKey: 'splits.filter.all' },
+  { value: 'active', labelKey: 'splits.filter.active' },
+  { value: 'inactive', labelKey: 'splits.filter.inactive' },
 ];
 
 function apiErrorMessage(error: unknown, fallback: string) {
@@ -46,6 +47,7 @@ function previewTargets(rule: SplitRule) {
 }
 
 export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOpen = false }: SplitRulesSectionProps) {
+  const { t } = useTranslation();
   const [showForm, setShowForm] = useState(startOpen);
   const [editingRule, setEditingRule] = useState<SplitRule | null>(null);
   // Bumped on every close so the next time the modal opens the form gets a brand
@@ -81,13 +83,13 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
     async (data: SplitRuleFormData) => {
       try {
         await createSplit.mutateAsync(data as SplitRuleCreate);
-        toast.success('Split rule created');
+        toast.success(t('splits.created'));
         closeForm();
       } catch {
-        toast.error('Could not create split rule');
+        toast.error(t('splits.createError'));
       }
     },
-    [createSplit, closeForm]
+    [createSplit, closeForm, t]
   );
 
   const handleUpdate = useCallback(
@@ -95,37 +97,37 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
       if (!editingRule) return;
       try {
         await updateSplit.mutateAsync({ id: editingRule.id, data });
-        toast.success('Split rule updated');
+        toast.success(t('splits.updated'));
         closeForm();
       } catch {
-        toast.error('Could not update split rule');
+        toast.error(t('splits.updateError'));
       }
     },
-    [editingRule, updateSplit, closeForm]
+    [editingRule, updateSplit, closeForm, t]
   );
 
   const handleActivate = useCallback(
     async (rule: SplitRule) => {
       try {
         await activateSplit.mutateAsync(rule.id);
-        toast.success('Split rule activated');
+        toast.success(t('splits.activated'));
       } catch (error) {
-        toast.error(apiErrorMessage(error, 'Could not activate split rule'));
+        toast.error(apiErrorMessage(error, t('splits.activateError')));
       }
     },
-    [activateSplit]
+    [activateSplit, t]
   );
 
   const handleDeactivate = useCallback(
     async (rule: SplitRule) => {
       try {
         await deactivateSplit.mutateAsync(rule.id);
-        toast.success('Split rule deactivated');
+        toast.success(t('splits.deactivated'));
       } catch (error) {
-        toast.error(apiErrorMessage(error, 'Could not deactivate split rule'));
+        toast.error(apiErrorMessage(error, t('splits.deactivateError')));
       }
     },
-    [deactivateSplit]
+    [deactivateSplit, t]
   );
 
   // Clicking Delete in the edit modal opens a custom confirmation modal instead
@@ -133,25 +135,25 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
   const handleDelete = useCallback(
     (rule: SplitRule) => {
       if (rule.active) {
-        toast.error('Deactivate this rule before deleting it.');
+        toast.error(t('splits.deactivateFirst'));
         return;
       }
       setConfirmDeleteRule(rule);
     },
-    []
+    [t]
   );
 
   const confirmDelete = useCallback(async () => {
     if (!confirmDeleteRule) return;
     try {
       await deleteSplit.mutateAsync(confirmDeleteRule.id);
-      toast.success('Split rule deleted');
+      toast.success(t('splits.deleted'));
       setConfirmDeleteRule(null);
       closeForm();
     } catch {
-      toast.error('Only inactive rules without payment history can be deleted');
+      toast.error(t('splits.deleteError'));
     }
-  }, [confirmDeleteRule, deleteSplit, closeForm]);
+  }, [confirmDeleteRule, deleteSplit, closeForm, t]);
 
   if (isLoading) {
     return (
@@ -165,7 +167,7 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
   }
 
   if (isError) {
-    return <ErrorState message="Could not load split rules" onRetry={onRetry} />;
+    return <ErrorState message={t('splits.loadError')} onRetry={onRetry} />;
   }
 
   const formOpen = showForm || editingRule !== null;
@@ -178,9 +180,9 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
         <section className="p-5 sm:p-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="font-semibold text-[#F5F5F7]">Rule Library</h2>
+              <h2 className="font-semibold text-[#F5F5F7]">{t('splits.ruleLibrary')}</h2>
               <p className="mt-1 text-sm text-[#94A3B8]">
-                {activeRules.length} active · {allRules.length - activeRules.length} inactive
+                {t('splits.libraryCounts', { active: activeRules.length, inactive: allRules.length - activeRules.length })}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -189,9 +191,9 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
                 <Input
                   value={search}
                   onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search rules by name"
+                  placeholder={t('splits.searchPlaceholder')}
                   className="pl-9"
-                  aria-label="Search rules by name"
+                  aria-label={t('splits.searchPlaceholder')}
                 />
               </div>
               <Button
@@ -203,7 +205,7 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
                 className="shrink-0"
               >
                 <Plus className="h-4 w-4" />
-                New rule
+                {t('splits.newRule')}
               </Button>
             </div>
           </div>
@@ -221,7 +223,7 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
                     : 'border border-white/[0.08] bg-white/[0.03] text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F5F5F7]'
                 )}
               >
-                {option.label}
+                {t(option.labelKey)}
               </button>
             ))}
           </div>
@@ -229,7 +231,7 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
           <div className="mt-4 overflow-hidden rounded-lg border border-white/[0.08]">
             {libraryRules.length === 0 ? (
               <p className="px-4 py-8 text-center text-sm text-[#94A3B8]">
-                {allRules.length === 0 ? 'No rules yet. Create one to get started.' : 'No rules match your search.'}
+                {allRules.length === 0 ? t('splits.noRulesYet') : t('splits.noRulesMatch')}
               </p>
             ) : (
               <div className="divide-y divide-white/[0.08]">
@@ -246,7 +248,7 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
                         setEditingRule(rule);
                       }}
                       className="group flex min-w-0 items-center gap-2 text-left sm:w-52 sm:shrink-0"
-                      title="Edit rule"
+                      title={t('splits.editRule')}
                     >
                       <span className="truncate font-medium text-[#F5F5F7] group-hover:text-white">{rule.name}</span>
                       <span
@@ -257,7 +259,7 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
                             : 'border-white/[0.10] bg-white/[0.04] text-[#94A3B8]'
                         )}
                       >
-                        {rule.active ? 'Active' : 'Inactive'}
+                        {rule.active ? t('splits.active') : t('splits.inactive')}
                       </span>
                     </button>
 
@@ -271,11 +273,11 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
                       {rule.active ? (
                         <Button variant="ghost" size="sm" onClick={() => handleDeactivate(rule)} className="min-w-24">
                           <PowerOff className="h-4 w-4" />
-                          Deactivate
+                          {t('splits.deactivate')}
                         </Button>
                       ) : (
                         <Button variant="outline" size="sm" onClick={() => handleActivate(rule)} className="min-w-24">
-                          Activate
+                          {t('splits.activate')}
                         </Button>
                       )}
                       <Button
@@ -286,7 +288,7 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
                           setEditingRule(rule);
                         }}
                         className="px-2"
-                        aria-label={`Edit ${rule.name}`}
+                        aria-label={t('splits.editAria', { name: rule.name })}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -303,7 +305,7 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
       <Dialog
         open={formOpen}
         onClose={closeForm}
-        title={editingRule ? `Edit ${editingRule.name}` : 'Create split rule'}
+        title={editingRule ? t('splits.editTitle', { name: editingRule.name }) : t('splits.createTitle')}
         className="max-w-2xl"
         adaptive
       >
@@ -333,7 +335,7 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
             {editingRule && (
               <div className="mt-4 flex items-center justify-between gap-3 border-t border-white/[0.08] pt-4">
                 <p className="text-xs text-[#94A3B8]">
-                  {editingRule.active ? 'Deactivate before deleting.' : 'Only draft rules with no payment history can be deleted.'}
+                  {editingRule.active ? t('splits.deactivateBeforeDeleting') : t('splits.onlyDraftDeletable')}
                 </p>
                 <Button
                   variant="ghost"
@@ -343,7 +345,7 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
                   className="text-[#FF2E93] hover:text-[#FF6AB6]"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Delete
+                  {t('common.delete')}
                 </Button>
               </div>
             )}
@@ -354,10 +356,10 @@ export function SplitRulesSection({ splits, isLoading, isError, onRetry, startOp
       {/* Delete confirmation — replaces window.confirm; stacks above the edit modal. */}
       <ConfirmDialog
         open={confirmDeleteRule !== null}
-        title="Delete rule?"
-        description="This only removes a draft rule with no payment history."
-        confirmLabel="Delete"
-        cancelLabel="Cancel"
+        title={t('splits.deleteConfirmTitle')}
+        description={t('splits.deleteConfirmDescription')}
+        confirmLabel={t('common.delete')}
+        cancelLabel={t('common.cancel')}
         destructive
         loading={deleteSplit.isPending}
         onConfirm={confirmDelete}

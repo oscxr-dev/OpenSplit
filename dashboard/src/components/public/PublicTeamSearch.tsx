@@ -1,13 +1,14 @@
 import { Search } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Input } from '@/components/ui/Input';
 import { cn } from '@/lib/utils';
 
 export type PublicTeamSort = 'splits' | 'active' | 'newest';
 
-const SORTS: Array<{ value: PublicTeamSort; label: string }> = [
-  { value: 'splits', label: 'Most splits' },
-  { value: 'active', label: 'Recently active' },
-  { value: 'newest', label: 'Newest' },
+const SORTS: Array<{ value: PublicTeamSort; labelKey: string }> = [
+  { value: 'splits', labelKey: 'public.sort.mostSplits' },
+  { value: 'active', labelKey: 'public.sort.recentlyActive' },
+  { value: 'newest', labelKey: 'public.sort.newest' },
 ];
 
 interface PublicTeamSearchProps {
@@ -18,6 +19,7 @@ interface PublicTeamSearchProps {
 }
 
 export function PublicTeamSearch({ query, onQueryChange, sort, onSortChange }: PublicTeamSearchProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-white/[0.08] bg-white/[0.025] p-3 sm:flex-row sm:items-center sm:justify-between">
       <div className="relative w-full sm:max-w-xs">
@@ -25,9 +27,9 @@ export function PublicTeamSearch({ query, onQueryChange, sort, onSortChange }: P
         <Input
           value={query}
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Search teams by name"
+          placeholder={t('public.search.placeholder')}
           className="pl-9"
-          aria-label="Search teams by name"
+          aria-label={t('public.search.placeholder')}
         />
       </div>
 
@@ -45,7 +47,7 @@ export function PublicTeamSearch({ query, onQueryChange, sort, onSortChange }: P
                 : 'border border-white/[0.08] bg-white/[0.03] text-[#94A3B8] hover:bg-white/[0.06] hover:text-[#F5F5F7]'
             )}
           >
-            {option.label}
+            {t(option.labelKey)}
           </button>
         ))}
       </div>

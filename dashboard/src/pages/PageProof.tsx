@@ -1,5 +1,6 @@
 import { FileQuestion } from 'lucide-react';
 import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useInvoice } from '@/hooks/useInvoices';
 import { SplitProofReceipt } from '@/components/payments/SplitProofReceipt';
 import { EmptyState } from '@/components/shared/EmptyState';
@@ -13,6 +14,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
  * nonexistent — id returns 404, which we render as a clean not-found state.
  */
 export function PageProof() {
+  const { t } = useTranslation();
   const { paymentId } = useParams<{ paymentId: string }>();
   const { data: payment, isLoading, isError } = useInvoice(paymentId ?? '');
 
@@ -30,8 +32,8 @@ export function PageProof() {
       <div className="mx-auto max-w-3xl">
         <EmptyState
           icon={<FileQuestion className="h-8 w-8 text-[#94A3B8]" />}
-          message="Proof not found"
-          description="This proof doesn’t exist or belongs to another workspace. Check the link and try again."
+          message={t('proof.notFound')}
+          description={t('proof.notFoundDescription')}
         />
       </div>
     );

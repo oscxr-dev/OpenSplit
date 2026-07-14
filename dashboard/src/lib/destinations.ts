@@ -5,6 +5,8 @@
  * rather than a Lightning address. Warning-only — never blocks a rule.
  */
 
+import i18n from '@/i18n';
+
 export type DestinationKind = 'lightning-address' | 'lnd-receiver' | 'none';
 
 export interface DestinationBadge {
@@ -29,10 +31,6 @@ const EMAIL_PROVIDER_DOMAINS = new Set([
   'icloud.com',
 ]);
 
-/** Static caution shown beneath a target whose ln_address domain is a known
- *  email provider. */
-export const EMAIL_ADDRESS_CAUTION = 'This looks like an email, not a Lightning address';
-
 /** True when `lnAddress`'s domain is a known consumer email provider. */
 export function looksLikeEmailProvider(lnAddress: string | null | undefined): boolean {
   if (!lnAddress) return false;
@@ -48,10 +46,10 @@ export function looksLikeEmailProvider(lnAddress: string | null | undefined): bo
  *  otherwise a present Lightning address; otherwise nothing configured. */
 export function destinationBadge(target: TargetDestinationInput): DestinationBadge {
   if (target.has_lnd_receiver) {
-    return { kind: 'lnd-receiver', label: 'Local LND receiver', variant: 'success' };
+    return { kind: 'lnd-receiver', label: i18n.t('splits.destination.lndReceiver'), variant: 'success' };
   }
   if (target.ln_address && target.ln_address.trim()) {
-    return { kind: 'lightning-address', label: 'Lightning address', variant: 'success' };
+    return { kind: 'lightning-address', label: i18n.t('splits.destination.lightningAddress'), variant: 'success' };
   }
-  return { kind: 'none', label: 'No destination', variant: 'default' };
+  return { kind: 'none', label: i18n.t('splits.destination.none'), variant: 'default' };
 }

@@ -1,4 +1,5 @@
 /** Pure presentation helpers for members / proof / public transparency. */
+import i18n from '@/i18n';
 
 /** Shorten a long identifier (npub, hash) keeping head and tail readable. */
 export function truncateMiddle(value: string, lead = 10, tail = 6): string {
@@ -13,5 +14,5 @@ export function memberPayoutHealth(failedCount: number): 'failed' | 'healthy' {
 
 /** Human label for the proof integrity check. */
 export function proofBalanceLabel(balanced: boolean): string {
-  return balanced ? 'Balance verified' : 'Mismatch detected';
+  return balanced ? i18n.t('proof.balanceVerified') : i18n.t('proof.mismatchDetected');
 }

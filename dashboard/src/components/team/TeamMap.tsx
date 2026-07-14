@@ -1,5 +1,6 @@
 import { Building2 } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { formatDateShort, formatSats } from '@/lib/utils';
 import type { Member, SplitRule } from '@/types/api';
 
@@ -56,13 +57,15 @@ function responsiveNodeSize(size: number) {
   return `clamp(82px, ${viewportSize}vw, ${size}px)`;
 }
 
-function memberStatus(member: Member) {
-  if (member.failed_count > 0) return 'Needs retry';
-  if (member.collision) return 'Check identity';
-  return 'Active';
+/** i18n key for a member's coarse payout status chip. */
+function memberStatusKey(member: Member) {
+  if (member.failed_count > 0) return 'team.map.needsRetry';
+  if (member.collision) return 'team.map.checkIdentity';
+  return 'team.map.active';
 }
 
 export function TeamMap({ members, workspaceName, selectedRule, tabsSlot }: TeamMapProps) {
+  const { t } = useTranslation();
   const [selection, setSelection] = useState<MapSelection>({ type: 'member', index: 0 });
   const [centerBlinking, setCenterBlinking] = useState(false);
   // The graph renders the selected rule's targets, enriched with payout stats
@@ -121,33 +124,33 @@ export function TeamMap({ members, workspaceName, selectedRule, tabsSlot }: Team
           <div className="grid gap-4 lg:grid-cols-[minmax(220px,0.42fr)_1fr] lg:items-center">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#FF2E93]">
-                {teamSelected ? 'Selected team' : 'Selected partner'}
+                {teamSelected ? t('team.map.selectedTeam') : t('team.map.selectedPartner')}
               </p>
               <div className="mt-2 flex flex-wrap items-end gap-3">
                 <h3 className="text-2xl font-semibold tracking-tight text-[#F5F5F7]">
                   {teamSelected ? workspaceName : compactName(selectedMember?.label ?? '')}
                 </h3>
                 <span className="mb-1 rounded-full border border-[#2A2D3A] bg-[#181A26] px-2.5 py-1 text-xs font-medium text-[#9AA4B2]">
-                  {teamSelected ? 'BTCPay source' : memberStatus(selectedMember as Member)}
+                  {teamSelected ? t('team.map.btcpaySource') : t(memberStatusKey(selectedMember as Member))}
                 </span>
               </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="rounded-lg border border-[#2A2D3A] bg-[#181A26] px-4 py-3">
-                <p className="text-xs text-[#9AA4B2]">Allocation</p>
+                <p className="text-xs text-[#9AA4B2]">{t('team.map.allocation')}</p>
                 <p className="mt-1 font-mono text-xl font-semibold text-[#F5F5F7]">
                   {teamSelected ? `${totalAllocation}%` : `${selectedMember?.current_percentage ?? 0}%`}
                 </p>
               </div>
               <div className="rounded-lg border border-[#2A2D3A] bg-[#181A26] px-4 py-3">
-                <p className="text-xs text-[#9AA4B2]">{teamSelected ? 'Partners' : 'Received'}</p>
+                <p className="text-xs text-[#9AA4B2]">{teamSelected ? t('team.map.partners') : t('team.map.received')}</p>
                 <p className="mt-1 font-mono text-xl font-semibold text-[#F5F5F7]">
                   {teamSelected ? visibleMembers.length : formatSats(selectedMember?.total_paid_sats ?? 0)}
                 </p>
               </div>
               <div className="rounded-lg border border-[#2A2D3A] bg-[#181A26] px-4 py-3">
-                <p className="text-xs text-[#9AA4B2]">{teamSelected ? 'Settled' : 'Last payout'}</p>
+                <p className="text-xs text-[#9AA4B2]">{teamSelected ? t('team.map.settled') : t('team.map.lastPayout')}</p>
                 <p className="mt-1 font-mono text-xl font-semibold text-[#F5F5F7]">
                   {teamSelected ? formatSats(totalReceived) : formatDateShort(selectedMember?.last_payment_at ?? null)}
                 </p>
@@ -205,7 +208,7 @@ export function TeamMap({ members, workspaceName, selectedRule, tabsSlot }: Team
         <button
           type="button"
           onClick={() => setSelection({ type: 'team' })}
-          aria-label={`Select ${workspaceName}`}
+          aria-label={t('team.map.selectAria', { name: workspaceName })}
           className={`allocation-hub absolute left-1/2 top-1/2 z-20 flex h-32 w-32 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border bg-[#151722] text-center transition hover:scale-[1.015] sm:h-40 sm:w-40 lg:h-48 lg:w-48 ${
             teamSelected
               ? 'border-[#FF2E93]/50 shadow-[0_0_0_10px_rgba(255,46,147,0.07),0_0_68px_rgba(255,46,147,0.18)] lg:shadow-[0_0_0_14px_rgba(255,46,147,0.07),0_0_78px_rgba(255,46,147,0.18)]'
@@ -214,7 +217,7 @@ export function TeamMap({ members, workspaceName, selectedRule, tabsSlot }: Team
         >
           <Building2 className="h-5 w-5 text-[#FF2E93] sm:h-6 sm:w-6 lg:h-7 lg:w-7" strokeWidth={1.8} />
           <p className="mt-3 px-4 text-xs font-semibold leading-4 text-[#F5F5F7] sm:text-sm lg:mt-4 lg:px-6 lg:text-base lg:leading-5">{workspaceName}</p>
-          <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#9AA4B2] sm:mt-3 sm:text-[10px] sm:tracking-[0.18em]">BTCPay store</p>
+          <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#9AA4B2] sm:mt-3 sm:text-[10px] sm:tracking-[0.18em]">{t('team.map.btcpayStore')}</p>
         </button>
 
         {visibleMembers.map((member, index) => {
@@ -230,7 +233,7 @@ export function TeamMap({ members, workspaceName, selectedRule, tabsSlot }: Team
               key={memberKey(member, index)}
               type="button"
               onClick={() => setSelection({ type: 'member', index })}
-              aria-label={`Select ${member.label}`}
+              aria-label={t('team.map.selectAria', { name: member.label })}
               className="allocation-member-node absolute z-30 flex -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full p-[2px] text-center transition hover:scale-[1.015]"
               style={{
                 left: `${node.x}%`,
@@ -252,7 +255,7 @@ export function TeamMap({ members, workspaceName, selectedRule, tabsSlot }: Team
                 </span>
                 <span className="mt-1 font-mono text-[24px] font-semibold leading-none tracking-tight text-[#FF2E93] sm:text-[28px]">{share}%</span>
                 {showSplitCount && (
-                  <span className="mt-1 text-[10px] font-medium leading-none text-[#9AA4B2]">{member.payment_count} splits</span>
+                  <span className="mt-1 text-[10px] font-medium leading-none text-[#9AA4B2]">{t('team.map.splitCount', { count: member.payment_count })}</span>
                 )}
               </span>
             </button>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Users } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useMembers } from '@/hooks/useMembers';
@@ -19,6 +20,7 @@ const ACTIVE_PAYOUT_STATUSES = ['pending', 'in_progress'];
 const RECENT_PAYMENT_WINDOW_MS = 10 * 60 * 1000;
 
 export function MembersPage() {
+  const { t } = useTranslation();
   const { tenant } = useAuth();
   const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch } = useMembers();
@@ -106,7 +108,7 @@ export function MembersPage() {
 
   // Safari-style tabs that attach to the top border of the graph card below.
   const ruleTabs = activeRules.length > 0 ? (
-    <div className="os-rule-tabs relative z-10 -mb-px flex gap-1 overflow-x-auto" role="tablist" aria-label="Active split rules">
+    <div className="os-rule-tabs relative z-10 -mb-px flex gap-1 overflow-x-auto" role="tablist" aria-label={t('team.activeRulesAria')}>
       {activeRules.map((rule) => {
         const selected = rule.id === selectedRule?.id;
         return (
@@ -148,7 +150,7 @@ export function MembersPage() {
   }
 
   if (isError) {
-    return <ErrorState message="Could not load team members" onRetry={() => refetch()} />;
+    return <ErrorState message={t('team.loadError')} onRetry={() => refetch()} />;
   }
 
   return (
@@ -158,9 +160,9 @@ export function MembersPage() {
       {activeRules.length === 0 ? (
         <EmptyState
           icon={<Users className="h-8 w-8 text-[#94A3B8]" />}
-          message="No active split"
-          description="Activate a rule from the library below to map who receives the next Bitcoin payment."
-          actionLabel="Create split rule"
+          message={t('team.noActiveSplit')}
+          description={t('team.noActiveSplitDescription')}
+          actionLabel={t('team.createSplitRule')}
           onAction={openSplitRules}
         />
       ) : (

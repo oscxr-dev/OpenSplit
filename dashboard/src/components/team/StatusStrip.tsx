@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenantStatus } from '@/hooks/useTenantStatus';
 import { btcpayPayoutProcessorsUrl, btcpayPayoutsUrl } from '@/lib/payments';
@@ -56,6 +57,9 @@ function ItemShell({ item, children }: { item: StatusStripItem; children: ReactN
  *  store, webhook, active rule, payout delivery, public page — each a coloured
  *  dot + short label that deep-links to its fix. Self-updating (~30s poll). */
 export function StatusStrip() {
+  // Subscribes this component to language changes so statusStripItems() (which
+  // reads the i18n singleton) recomputes with the active language.
+  const { t } = useTranslation();
   const { tenant } = useAuth();
   const { data: status } = useTenantStatus();
 
@@ -77,7 +81,7 @@ export function StatusStrip() {
   return (
     <div className="flex flex-col gap-2">
       <nav
-        aria-label="Pipeline status"
+        aria-label={t('status.ariaLabel')}
         className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.07] bg-[#11131F]/48 p-2.5"
       >
         {items.map((item) => (

@@ -3,10 +3,12 @@ import axios from 'axios';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { AlertTriangle, Copy, RefreshCw, Webhook } from 'lucide-react';
 import { toast } from 'sonner';
+import { useTranslation } from 'react-i18next';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useAuth } from '@/hooks/useAuth';
+import i18n, { dateFnsLocale } from '@/i18n';
 import api from '@/lib/api';
 import { copyToClipboard } from '@/lib/utils';
 import type { BtcPayWebhookSecret } from '@/types/api';
@@ -39,13 +41,14 @@ function isLocalOnlyHost(url: string): boolean {
 
 function lastEventLabel(lastWebhookAt: string): string {
   try {
-    return formatDistanceToNow(parseISO(lastWebhookAt), { addSuffix: true });
+    return formatDistanceToNow(parseISO(lastWebhookAt), { addSuffix: true, locale: dateFnsLocale() });
   } catch {
-    return 'recently';
+    return i18n.t('settings.webhook.recently');
   }
 }
 
 function CopyButton({ value, label }: { value: string; label: string }) {
+  const { t } = useTranslation();
   return (
     <button
       type="button"
@@ -53,8 +56,8 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       title={label}
       onClick={() => {
         copyToClipboard(value)
-          .then(() => toast.success('Copied to clipboard'))
-          .catch(() => toast.error('Could not copy — copy it manually'));
+          .then(() => toast.success(t('common.copied')))
+          .catch(() => toast.error(t('common.copyError')));
       }}
       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/[0.12] text-[#94A3B8] transition hover:border-[#FF2D78]/45 hover:text-[#FF2D78] focus:outline-none focus:ring-2 focus:ring-[#FF2D78]/20"
     >
@@ -64,6 +67,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
 }
 
 export function BtcPayWebhookPanel() {
+  const { t } = useTranslation();
   const { tenant, refreshTenant } = useAuth();
   const info = tenant?.tenant;
   const secretSet = Boolean(info?.btcpay_webhook_secret_set);
@@ -97,41 +101,43 @@ export function BtcPayWebhookPanel() {
       setReveal(res.data);
       await refreshTenant();
     } catch (error) {
-      toast.error(apiErrorMessage(error, 'Could not generate the webhook secret'));
+      toast.error(apiErrorMessage(error, t('settings.webhook.generateError')));
     } finally {
       setGenerating(false);
       setConfirmRegenerateOpen(false);
     }
   }
 
-  const statusBadge = verified ? 'Verified' : secretSet ? 'Waiting' : 'Not configured';
+  const statusBadge = verified
+    ? t('settings.webhook.verified')
+    : secretSet
+      ? t('settings.webhook.waiting')
+      : t('settings.webhook.notConfigured');
 
   return (
     <div className="p-6 sm:p-8">
       <div className="flex flex-wrap items-center gap-3">
         <Webhook className="h-5 w-5 text-[#FF2D78]" strokeWidth={1.8} />
-        <h2 className="font-semibold text-[#F5F5F7]">Webhook</h2>
+        <h2 className="font-semibold text-[#F5F5F7]">{t('settings.webhook.title')}</h2>
         <Badge variant={verified ? 'success' : secretSet ? 'warning' : 'default'}>
           {statusBadge}
         </Badge>
       </div>
       <p className="mt-2 text-sm text-[#94A3B8]">
-        BTCPay pushes settled invoices to OpenSplit through a signed webhook. Events without a
-        valid signature are rejected.
+        {t('settings.webhook.description')}
       </p>
 
       {!secretSet && !reveal && (
         <div className="mt-4 rounded-2xl border border-white/[0.10] bg-white/[0.03] px-4 py-3 text-sm text-[#94A3B8]">
-          <span className="font-semibold text-[#F5F5F7]">No webhook secret yet.</span> Splits only
-          run once BTCPay can deliver signed events. Generate a secret here, then create the
-          webhook in BTCPay with it — the guided steps appear after generating.
+          <span className="font-semibold text-[#F5F5F7]">{t('settings.webhook.setupCtaTitle')}</span>{' '}
+          {t('settings.webhook.setupCtaBody')}
         </div>
       )}
 
       {reveal && (
         <div className="mt-5 rounded-2xl border border-white/[0.10] bg-white/[0.03] p-4 sm:p-5">
           <p className="text-sm font-semibold text-[#F5F5F7]">
-            Create the webhook in BTCPay (Store settings → Webhooks → Create Webhook):
+            {t('settings.webhook.createSteps')}
           </p>
           <ol className="mt-4 space-y-4">
             <li className="flex gap-3">
@@ -139,17 +145,16 @@ export function BtcPayWebhookPanel() {
                 1
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[#F5F5F7]">Paste this as the Payload URL</p>
+                <p className="text-sm font-medium text-[#F5F5F7]">{t('settings.webhook.step1')}</p>
                 <div className="mt-2 flex items-center gap-2">
                   <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-white/[0.10] bg-[#11131F] px-3 py-2 font-mono text-xs text-[#F5F5F7]">
                     {reveal.webhook_url}
                   </code>
-                  <CopyButton value={reveal.webhook_url} label="Copy webhook URL" />
+                  <CopyButton value={reveal.webhook_url} label={t('settings.webhook.copyUrl')} />
                 </div>
                 {isLocalOnlyHost(reveal.webhook_url) && (
                   <p className="mt-2 text-xs text-[#94A3B8]">
-                    This is the address BTCPay must reach — it is served from BTCPay&apos;s own
-                    network, not your browser.
+                    {t('settings.webhook.localHint')}
                   </p>
                 )}
               </div>
@@ -159,16 +164,16 @@ export function BtcPayWebhookPanel() {
                 2
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[#F5F5F7]">Paste this as the Secret</p>
+                <p className="text-sm font-medium text-[#F5F5F7]">{t('settings.webhook.step2')}</p>
                 <div className="mt-2 flex items-center gap-2">
                   <code className="min-w-0 flex-1 overflow-x-auto whitespace-nowrap rounded-lg border border-white/[0.10] bg-[#11131F] px-3 py-2 font-mono text-xs text-[#F5F5F7]">
                     {reveal.secret}
                   </code>
-                  <CopyButton value={reveal.secret} label="Copy webhook secret" />
+                  <CopyButton value={reveal.secret} label={t('settings.webhook.copySecret')} />
                 </div>
                 <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-amber-200">
                   <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-                  Shown only once — paste it into BTCPay now.
+                  {t('settings.webhook.shownOnce')}
                 </p>
               </div>
             </li>
@@ -178,7 +183,7 @@ export function BtcPayWebhookPanel() {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-[#F5F5F7]">
-                  Under events, choose “Send specific events” and tick:
+                  {t('settings.webhook.step3')}
                 </p>
                 <ul className="mt-2 space-y-1">
                   {reveal.events.map((event) => (
@@ -192,7 +197,7 @@ export function BtcPayWebhookPanel() {
           </ol>
           <div className="mt-5 flex justify-end">
             <Button variant="outline" size="sm" onClick={() => setReveal(null)}>
-              Done — I saved it in BTCPay
+              {t('settings.webhook.done')}
             </Button>
           </div>
         </div>
@@ -201,7 +206,7 @@ export function BtcPayWebhookPanel() {
       {regenerated && !verified && (
         <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-amber-300/20 bg-amber-400/[0.08] px-4 py-3 text-sm font-medium text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} />
-          <span>Update the secret in BTCPay — old events will be rejected.</span>
+          <span>{t('settings.webhook.updateSecretWarning')}</span>
         </div>
       )}
 
@@ -211,13 +216,13 @@ export function BtcPayWebhookPanel() {
             <>
               <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
               <span className="font-medium text-emerald-300">
-                Webhook verified — last event {lastEventLabel(lastWebhookAt as string)}
+                {t('settings.webhook.verifiedLastEvent', { time: lastEventLabel(lastWebhookAt as string) })}
               </span>
             </>
           ) : (
             <>
               <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-amber-300" />
-              <span className="font-medium text-amber-200">Waiting for first webhook…</span>
+              <span className="font-medium text-amber-200">{t('settings.webhook.waitingFirst')}</span>
             </>
           )}
         </div>
@@ -226,7 +231,7 @@ export function BtcPayWebhookPanel() {
       <div className="mt-5 flex flex-wrap items-center gap-2">
         {!secretSet ? (
           <Button variant="primary" size="sm" onClick={generateSecret} loading={generating}>
-            Generate webhook secret
+            {t('settings.webhook.generate')}
           </Button>
         ) : (
           <Button
@@ -236,17 +241,17 @@ export function BtcPayWebhookPanel() {
             disabled={generating}
           >
             <RefreshCw className="h-4 w-4" strokeWidth={1.8} />
-            Regenerate secret
+            {t('settings.webhook.regenerate')}
           </Button>
         )}
       </div>
 
       <ConfirmDialog
         open={confirmRegenerateOpen}
-        title="Regenerate webhook secret?"
-        description="The current secret stops working immediately. BTCPay keeps signing with the old one until you paste the new secret there, so deliveries will be rejected in the meantime."
-        cancelLabel="Cancel"
-        confirmLabel="Regenerate"
+        title={t('settings.webhook.regenerateTitle')}
+        description={t('settings.webhook.regenerateDescription')}
+        cancelLabel={t('common.cancel')}
+        confirmLabel={t('settings.webhook.regenerateConfirm')}
         destructive
         loading={generating}
         confirmDisabled={generating}

@@ -1,5 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { cn } from '@/lib/utils';
@@ -48,8 +49,8 @@ export function ConfirmDialog({
   description,
   logoSrc,
   logoAlt = 'OpenSplit',
-  confirmLabel = 'Confirm',
-  cancelLabel = 'Cancel',
+  confirmLabel,
+  cancelLabel,
   destructive = false,
   celebrateOnConfirm = false,
   loading = false,
@@ -58,6 +59,7 @@ export function ConfirmDialog({
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   const [celebrating, setCelebrating] = useState(false);
   const celebrationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -120,7 +122,7 @@ export function ConfirmDialog({
       {children && <div className="mt-4">{children}</div>}
       <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Button variant="outline" size="sm" onClick={onClose} className="min-w-20">
-          {cancelLabel}
+          {cancelLabel ?? t('common.cancel')}
         </Button>
         <Button
           variant={destructive ? 'destructive' : 'default'}
@@ -137,7 +139,7 @@ export function ConfirmDialog({
                 : 'os-confirm-primary border-transparent bg-[#FF2D78] text-white hover:bg-[#e9216a]'
           )}
         >
-          {confirmLabel}
+          {confirmLabel ?? t('common.confirm')}
         </Button>
       </div>
     </Dialog>
